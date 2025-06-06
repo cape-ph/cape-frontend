@@ -1,12 +1,12 @@
 <script lang="ts">
-    import { toaster } from "$lib/toaster";
+    import { toaster } from '$lib/toaster';
     import { FileUpload } from '@skeletonlabs/skeleton-svelte';
     import type { FileAcceptDetails, FileRejectDetails } from '@zag-js/file-upload';
 
     import ImagePlus from '@lucide/svelte/icons/image-plus';
     import Paperclip from '@lucide/svelte/icons/paperclip';
     import CircleX from '@lucide/svelte/icons/circle-x';
-    
+
     let files = $state<File[] | undefined>();
 
     function handleFileAccept(details: FileAcceptDetails) {
@@ -22,7 +22,7 @@
     }
 
     function uploadFile() {
-        if ((!files) || (files.length === 0)) {
+        if (!files || files.length === 0) {
             toaster.error({
                 title: 'No file selected'
             });
@@ -37,8 +37,8 @@
     }
 </script>
 
-<div class="card bg-surface-100-900 shadow p-5">
-    <div class="space-y-2 mb-4">
+<div class="card bg-surface-100-900 p-5 shadow">
+    <div class="mb-4 space-y-2">
         <h2 class="h2 text-primary-500 dark:text-primary-200">File Upload</h2>
         <p class="opacity-80">Choose a location to upload your file.</p>
     </div>
@@ -63,10 +63,9 @@
         </label>
     </div>
 
-
     <!-- File input -->
-    <FileUpload 
-        name="file" 
+    <FileUpload
+        name="file"
         maxFiles={10}
         onFileAccept={handleFileAccept}
         onFileReject={handleFileReject}
@@ -75,19 +74,15 @@
         classes="w-full mb-4"
     >
         {#snippet iconInterface()}
-            <ImagePlus class="size-8"/>
+            <ImagePlus class="size-8" />
         {/snippet}
         {#snippet iconFile()}
-            <Paperclip class="size-4"/>
+            <Paperclip class="size-4" />
         {/snippet}
         {#snippet iconFileRemove()}
-            <CircleX class="size-4"/>
+            <CircleX class="size-4" />
         {/snippet}
     </FileUpload>
 
-    <button
-        class="btn preset-filled-primary-500"
-        onclick={uploadFile}>
-        Upload
-    </button>
+    <button class="btn preset-filled-primary-500" onclick={uploadFile}> Upload </button>
 </div>
