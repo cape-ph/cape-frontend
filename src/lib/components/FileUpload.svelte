@@ -2,15 +2,49 @@
     import { toaster } from '$lib/toaster';
     import { FileUpload } from '@skeletonlabs/skeleton-svelte';
     import type { FileAcceptDetails, FileRejectDetails } from '@zag-js/file-upload';
+    import { multiPartUpload } from '$lib/mpu';
+    import type { OnProgress, MultipartUploadResult } from '$lib/mpu';
 
     import ImagePlus from '@lucide/svelte/icons/image-plus';
     import Paperclip from '@lucide/svelte/icons/paperclip';
     import CircleX from '@lucide/svelte/icons/circle-x';
 
-    let files = $state<File[] | undefined>();
+    let { bucket } = $props<{ bucket: string }>();
+
+    type UploadItem = {
+        id: string;     // Stable key for list rendering
+        file: File;     // Handle to the file to upload
+        key: string;    // Destination S3 key
+        bytesSent: number;
+        totalBytes: number;
+        result?: MultipartUploadResult;
+        controller?: AbortController;
+    }
+
+    let items = $state<UploadItem[] | undefined>();
+
+    function getId(file: File): string {
+        return `${crypto.randomUUID()}`;
+    }
+
+    function getKey(file: File): string {
+        return `unprocessed/${Date.now()}_${file.name}`;
+    }
+
+    function isUploaded(item: UploadItem): boolean {
+        return (item.bytesSent >= item.totalBytes);
+    }
 
     function handleFileAccept(details: FileAcceptDetails) {
-        files = details.files;
+        items = details.files.map((file) => {
+            return {
+                id: getId(file),
+                file: file,
+                key: getKey(file),
+                bytesSent: 0,
+                totalBytes: file.size,
+            }
+        });
     }
 
     function handleFileReject(details: FileRejectDetails) {
@@ -21,17 +55,50 @@
         }
     }
 
-    function uploadFile() {
-        if (!files || files.length === 0) {
+    async function uploadFile() {
+        if (!items || items.length === 0) {
             toaster.error({
                 title: 'No file selected'
             });
             return;
         } else {
-            for (const file of files) {
-                toaster.info({
-                    title: `Uploading ${file.name}...`
-                });
+            for (const item of items) {
+                if (isUploaded(item)) {
+                    continue;
+                }
+
+                const abortController = new AbortController();
+                item.controller = abortController;
+
+                const onProgress: OnProgress = (bytesSent, totalBytes, ctx) => {
+                    item.bytesSent = bytesSent;
+                    item.totalBytes = totalBytes;
+                }
+
+                try {
+                    const res = await multiPartUpload(item.file, {
+                        bucket: bucket,
+                        key: item.key,
+                        signal: item.controller.signal,
+                        onProgress: onProgress,
+                    });
+
+                    item.result = res;
+                } catch (err: any) {
+                    if (err?.name === 'CanceledError') {
+                        toaster.info({
+                            title: `Upload ${item.file.name} canceled.`
+                        });
+                    } else {
+                        const message = err instanceof Error ? err.message : String(err);
+                        toaster.error({
+                            title: `An error occurred while uploading ${item.file.name}: ${message}`
+                        });
+                        console.error(err);
+                    }
+                } finally {
+                    item.controller = undefined;
+                }
             }
         }
     }
@@ -40,27 +107,6 @@
 <div class="card bg-surface-100-900 p-5 shadow">
     <div class="mb-4 space-y-2">
         <h2 class="h2 text-primary-500 dark:text-primary-200">File Upload</h2>
-        <p class="opacity-80">Choose a location to upload your file.</p>
-    </div>
-
-    <!-- Bucket selector-->
-    <div class="mb-8">
-        <label>
-            <span class="label-text">S3 Bucket</span>
-            <select class="select bg-surface-50-950 mb-2" name="bucket">
-                <option value="bucket-1">Bucket 1</option>
-                <option value="bucket-2">Bucket 2</option>
-                <option value="bucket-3">Bucket 3</option>
-            </select>
-        </label>
-        <label>
-            <span class="label-text">Bucket prefix</span>
-            <select class="select bg-surface-50-950 mb-2" name="prefix">
-                <option value="prefix-1">Prefix 1</option>
-                <option value="prefix-2">Prefix 2</option>
-                <option value="prefix-3">Prefix 3</option>
-            </select>
-        </label>
     </div>
 
     <!-- File input -->
