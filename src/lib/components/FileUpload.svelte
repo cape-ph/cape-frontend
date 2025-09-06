@@ -9,7 +9,7 @@
     import Paperclip from '@lucide/svelte/icons/paperclip';
     import CircleX from '@lucide/svelte/icons/circle-x';
 
-    let { bucket } = $props<{ bucket: string }>();
+    let { baseUrl, bucket } = $props<{ baseUrl: string, bucket: string }>();
 
     type UploadItem = {
         id: string;     // Stable key for list rendering
@@ -77,6 +77,7 @@
 
                 try {
                     const res = await multiPartUpload(item.file, {
+                        baseUrl: baseUrl,
                         bucket: bucket,
                         key: item.key,
                         signal: item.controller.signal,

@@ -47,7 +47,7 @@
 {:else}
     <div class="flex h-screen items-center justify-center">
         <div class="w-lg">
-            <FileUpload bucket="ccd-dlh-t-seqauto-input-raw-vbkt-s3-b8fded5"/>
+            <FileUpload baseUrl="https://api.cape-dev.org/capi-dev" bucket="ccd-dlh-t-seqauto-input-raw-vbkt-s3-b8fded5"/>
         </div>
     </div>
 {/if}
