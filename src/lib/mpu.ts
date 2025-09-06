@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { CanceledError } from 'axios';
 import { XMLParser } from 'fast-xml-parser';
 
 
@@ -15,6 +15,19 @@ const abortMpuUrl = (base: string) => `${base}/objstorage/abortmpu`;
 const DEFAULT_PART_SIZE = 10 * 1024 * 1024;  // 10 MB
 const DEFAULT_NUM_RETRIES = 10;
 
+/**
+ * Parameters used in the multi-part upload API
+ */
+export interface MultipartUploadParams {
+    baseUrl: string,
+    bucket: string,
+    key: string,
+    partSize?: number,
+    numRetries?: number,
+    signal?: AbortSignal,
+    onProgress?: OnProgress,
+    httpsAgent?: Agent
+}
 
 export interface MultipartUploadResult {
     location: string;
@@ -26,7 +39,7 @@ export interface MultipartUploadResult {
 }
 
 export type OnProgress = (
-    bytesSent: number, 
+    bytesSent: number,
     totalBytes: number,
     ctx: {
         partNumber: number,
@@ -40,36 +53,14 @@ export type Agent = unknown;
 
 export async function multiPartUpload(
     file: Blob,
-    {
-        baseUrl,
-        bucket,
-        key,
-        partSize = DEFAULT_PART_SIZE,
-        numRetries = DEFAULT_NUM_RETRIES,
-        signal,
-        onProgress,
-        httpsAgent,
-    }: {
-        baseUrl: string,
-        bucket: string,
-        key: string,
-        partSize?: number,
-        numRetries?: number,
-        signal?: AbortSignal,
-        onProgress?: OnProgress,
-        httpsAgent?: Agent
-    }
+    params: MultipartUploadParams
 ): Promise<MultipartUploadResult> {
-    const size = normalizePartSize(file, partSize);
-    const numParts = getNumParts(file, size);
-    const { uploadId } = await createMultipartUpload(baseUrl, bucket, key, httpsAgent);
+    const uploadId = await createMultipartUpload(params);
     try {
-        const urls = await openMultipartUpload(baseUrl, bucket, key, uploadId, numParts, httpsAgent);
-        const parts = await doMultipartUpload(file, size, urls, numRetries, signal, onProgress, httpsAgent);
-        const result = await completeMultipartUpload(baseUrl, bucket, key, uploadId, parts, httpsAgent);
+        const result = await sendMultipartUpload(file, uploadId, params);
         return result;
     } catch (err: any) {
-        await abortMultipartUpload(baseUrl, bucket, key, uploadId, httpsAgent);
+        await abortMultipartUpload(uploadId, params);
         throw err;
     }
 }
@@ -82,34 +73,37 @@ const parser = new XMLParser({
 });
 
 
-type CreateMultipartUploadResult = {
-    bucket: string;
-    key: string;
-    uploadId: string;
-};
-
 /**
- * Create a multi-part upload request
- * 
- * @param bucket the AWS bucket
- * @param key the key
- * @returns the multipart upload result
+ * Creates a new multipart upload request for an object in the specified bucket.
+ *
+ * This function sends an `InitiateMultipartUpload` request to the storage service,
+ * using the provided `bucket` and `key`. It parses the XML response and extracts
+ * the `UploadId`, which uniquely identifies the multipart upload session.
+ *
+ * @async
+ * @function createMultipartUpload
+ * @param {Object} params - Parameters for initiating the multipart upload.
+ * @param {string} params.bucket - The name of the bucket where the object will be stored.
+ * @param {string} params.key - The object key (path/filename) within the bucket.
+ * @param {string} params.baseUrl - The base URL of the storage service endpoint.
+ * @param {import("https").Agent} [params.httpsAgent] - Optional custom HTTPS agent (e.g., for TLS settings or proxy).
+ * @returns {Promise<string>} A promise that resolves to the `UploadId` string, which must be used in subsequent multipart upload requests.
+ *
+ * @throws {Error} If the service response does not contain a valid `UploadId`.
+ * @throws {Error} If the request fails (network error, invalid credentials, etc.).
  */
-async function createMultipartUpload(
-    base: string,
-    bucket: string,
-    key: string,
-    httpsAgent: Agent,
-): Promise<CreateMultipartUploadResult> {
-    const params = { bucket, key };
-
+export async function createMultipartUpload(
+    { bucket, key, baseUrl, httpsAgent, signal }: MultipartUploadParams
+): Promise<string> {
+    const queryParams = { bucket, key };
     const { data } = await axios.post(
-        createMpuUrl(base),
+        createMpuUrl(baseUrl),
         null,
         {
-            params,
+            params: queryParams,
             responseType: 'text',
-            httpsAgent
+            httpsAgent,
+            signal
         },
     );
 
@@ -118,45 +112,117 @@ async function createMultipartUpload(
     if (!r?.UploadId) {
         throw new Error(`Unexpected XML from MPU create: ${data?.slice?.(0, 200)}...`);
     }
-
-    return {
-        bucket: r.Bucket as string,
-        key: r.Key as string,
-        uploadId: r.UploadId as string,
-    };
+    return r.UploadId as string;
 }
 
 
-type PartUrl = {
+export async function sendMultipartUpload(
+    file: Blob,
+    uploadId: string,
+    params: MultipartUploadParams
+): Promise<MultipartUploadResult> {
+    const { partSize, numParts } = splitMultipartUpload(file, params);
+    const urls = await openMultipartUpload(uploadId, numParts, params);
+    const parts = await doMultipartUpload(file, partSize, urls, params);
+    const result = await completeMultipartUpload(uploadId, parts, params);
+    return result;
+}
+
+
+/**
+ * Abort an in-progress S3 multipart upload.
+ *
+ * This sends an `AbortMultipartUpload` request to the backend so that
+ * all uploaded parts are discarded and storage resources are released.
+ *
+ * Unlike other helper functions, this request is **not** bound to the
+ * `AbortSignal` in {@link MultipartUploadParams}. Cleanup should always
+ * be attempted, even if the original upload was canceled or the signal
+ * has already been triggered.
+ *
+ * @async
+ * @function abortMultipartUpload
+ * @param {string} uploadId - The `UploadId` identifying the multipart upload to abort.
+ * @param {MultipartUploadParams} params - Configuration for the request.
+ * @param {string} params.baseUrl - Base URL of the backend service.
+ * @param {string} params.bucket - Target bucket name/UUID.
+ * @param {string} params.key - Object key (path/filename).
+ * @param {import("https").Agent} [params.httpsAgent] - Optional custom HTTPS agent.
+ * @returns {Promise<void>} Resolves once the abort request completes.
+ *
+ * @throws {Error} If the server responds with an error or the request fails.
+ */
+export async function abortMultipartUpload(
+    uploadId: string,
+    params: MultipartUploadParams
+): Promise<void> {
+    const {
+        baseUrl,
+        bucket,
+        key,
+        httpsAgent,
+    } = params;
+
+    await axios.delete(abortMpuUrl(baseUrl), {
+        params: {
+            Bucket: bucket,
+            Key: key,
+            UploadId: uploadId,
+            httpsAgent,
+            timeout: 15_000,
+        },
+    });
+}
+
+
+/** Private functions ====================================================== */
+
+
+function splitMultipartUpload(
+    file: Blob,
+    { partSize = DEFAULT_PART_SIZE }: MultipartUploadParams
+): { partSize: number, numParts: number } {
+    const size = normalizePartSize(file, partSize);
+    const numParts = getNumParts(file, size);
+    if (!Number.isInteger(numParts) || numParts <= 0) {
+        throw new RangeError(`numParts must be a positive integer, got ${numParts}`);
+    }
+    return { partSize: size, numParts };
+}
+
+
+interface PartUrl {
     partNumber: number;
     url: string;
 };
 
+
 /**
  * Fetch presigned part URLs for an S3 multipart upload.
  *
- * @param {string} bucket     Target bucket name/uuid.
- * @param {string} key        Object key (path/filename).
- * @param {string} uploadId   UploadId returned by InitiateMultipartUpload.
- * @param {number} numParts   Total number of parts that will be uploaded (1..10,000).
- * @returns {Promise<PartUrl[]>} A list of `{ partNumber, url }` sorted by `partNumber` ascending.
- * @throws {RangeError} If `numParts` is not a positive integer.
- * @throws {Error} If the server response isn’t the expected array shape.
+ * This function requests presigned URLs for each part of a multipart upload.
+ * The part size is normalized, and the number of parts is derived from the file size.
+ * The server is expected to return an array of objects with `partNumber` and `url`.
  */
 async function openMultipartUpload(
-    base: string,
-    bucket: string,
-    key: string,
     uploadId: string,
     numParts: number,
-    httpsAgent: Agent,
+    params: MultipartUploadParams
 ): Promise<PartUrl[]> {
-    if (!Number.isInteger(numParts) || numParts <= 0) {
-        throw new RangeError(`numParts must be a positive integer, got ${numParts}`);
+    const {
+        baseUrl,
+        bucket,
+        key,
+        signal,
+        httpsAgent,
+    } = params;
+
+    if (signal?.aborted) {
+        throw new CanceledError()
     }
 
     const resp = await axios.get(
-        partUrlsUrl(base),
+        partUrlsUrl(baseUrl),
         {
             params: {
                 bucket,
@@ -165,12 +231,12 @@ async function openMultipartUpload(
                 numParts,
             },
             responseType: 'json',
-            httpsAgent
+            httpsAgent,
+            signal
         }
     );
 
     const data = resp.data;
-
     if (!Array.isArray(data)) {
         throw new Error(`Unexpected response: expected array, got ${typeof data}`);
     }
@@ -190,7 +256,6 @@ async function openMultipartUpload(
 
     // Sort by partNumber
     items.sort((a, b) => a.partNumber - b.partNumber);
-
     return items;
 }
 
@@ -219,33 +284,35 @@ function shouldRetry(status: number) {
 
 async function doMultipartUpload(
     file: Blob,
-    size: number,
+    partSize: number,
     urls: PartUrl[],
-    numRetries: number,
-    signal: AbortSignal | undefined,
-    onProgress: OnProgress | undefined,
-    httpsAgent: Agent | undefined
+    parameters: MultipartUploadParams
 ): Promise<UploadedPart[]> {
+    const {
+        httpsAgent,
+        signal,
+        onProgress,
+        numRetries = DEFAULT_NUM_RETRIES
+    } = parameters;
 
     // sanity check: ensure ascending partNumber 1..N
     for (let i = 0; i < urls.length; i++) {
         const expectedPartNumber = i + 1;
         if (urls[i].partNumber !== expectedPartNumber) {
             throw new Error(
-                `doMultipartUpload: urls not in ascending order or missing numbers; ` +
+                `Urls not in ascending order or missing numbers; ` +
                 `found partNumber=${urls[i].partNumber}, expected ${expectedPartNumber}`
             );
         }
     }
 
     const uploaded: UploadedPart[] = [];
-    const numParts = getNumParts(file, size);
+    const numParts = getNumParts(file, partSize);
     const totalBytes = file.size;
     let bytesSent = 0;
 
-    for (const { index, part } of iterateFileChunks(file, size)) {
+    for (const { index, part } of iterateFileChunks(file, partSize)) {
         const { partNumber, url } = urls[index];
-
         let attempt = 0;
         let perLoaded = 0;
         const partSize = part.size;
@@ -343,24 +410,30 @@ function getMultipartUploadXML(parts: UploadedPart[]): string {
 
 
 async function completeMultipartUpload(
-    base:  string,
-    bucket: string,
-    key: string,
     uploadId: string,
     parts: UploadedPart[],
-    httpsAgent: Agent,
+    params: MultipartUploadParams
 ): Promise<MultipartUploadResult> {
+    const {
+        baseUrl,
+        bucket,
+        key,
+        httpsAgent,
+        signal,
+    } = params;
+
     if (parts.length === 0) throw new Error('completeMultipartUpload: no parts provided');
     const xml = getMultipartUploadXML(parts);
 
     const resp = await axios.post(
-        completeMpuUrl(base),
+        completeMpuUrl(baseUrl),
         xml,
         {
             params: { bucket, key, uploadId },
             headers: { 'Content-Type': 'application/xml' },
             responseType: 'text',
-            httpsAgent
+            httpsAgent,
+            signal
         }
     );
 
@@ -379,43 +452,6 @@ async function completeMultipartUpload(
         checksumType: CompleteMultipartUploadResult.ChecksumType
     };
 }
-
-
-/**
- * Abort an in-progress S3 multipart upload.
- *
- * NOTE: If your endpoint expects lowercase param names (bucket/key/uploadId) or POST instead of DELETE,
- *       adjust the `params` keys or the HTTP method below.
- *
- * @param bucket    Target bucket name/UUID.
- * @param key       Object key (path/filename).
- * @param uploadId  UploadId returned by InitiateMultipartUpload.
- * @returns Resolves on success; throws on HTTP error (status >= 400).
- */
-async function abortMultipartUpload(
-    base: string,
-    bucket: string,
-    key: string,
-    uploadId: string,
-    httpsAgent: Agent
-): Promise<void> {
-    const resp = await axios.delete(abortMpuUrl(base), {
-        params: {
-            Bucket: bucket,
-            Key: key,
-            UploadId: uploadId,
-            httpsAgent
-        },
-    });
-}
-
-
-/**
- * Chunking
- * 
- * Methods and iterators to lazily read an upload a file to be sent to AWS
- * through a Multi-Part Upload.
- */
 
 
 /** S3 Multi-Part Upload size limits  */
@@ -446,25 +482,6 @@ function getNumParts(file: Blob, size: number): number {
 }
 
 
-interface FileChunk {
-    index: number;
-    start: number;
-    end: number;
-    isLast: boolean;
-    part: Blob;
-}
-
-/**
- * Create a **lazy** (zero-copy) iterator over `Blob` chunks. Each yield provides
- * metadata plus a `Blob` slice for that chunk. Only one chunk is held in memory
- * at a time unless you read buffers yourself.
- *
- * @param {Blob} file           A browser `File` or `Blob`.
- * @param {number} chunkSize    Chunk size in bytes; must be > 0. For S3 MPU, use
- *                              {@link normalizePartSize} first to satisfy size/part limits.
- * @returns {Generator<FileChunk, void, unknown>} A synchronous generator yielding {@link FileChunk}.
- * @throws {RangeError}         If `chunkSize` is not a positive finite number.
- */
 function* iterateFileChunks(
     file: Blob,
     chunkSize: number
