@@ -2,8 +2,8 @@
     import { onMount } from 'svelte';
     import { page } from '$app/state';
     import { userManager } from '$lib/cognito';
-    import FileUpload from '$lib/components/FileUpload.svelte';
-    import LoggingIn from '$lib/components/LoggingIn.svelte';
+    import FileUpload from '$lib/components/FileUpload/FileUpload.svelte';
+    import LoggingIn from '$lib/components/LoggingIn/LoggingIn.svelte';
     import type { User } from 'oidc-client-ts';
 
     let user = $state<User | undefined>(undefined);
