@@ -12,6 +12,9 @@
 
     onMount(async () => {
         if (!userManager) return;   // SSR guard
+        const path = window.location.pathname;
+        if (path.startsWith('/auth/')) return;
+
         const existing = await userManager.getUser();
 
         if (existing && !existing.expired) {

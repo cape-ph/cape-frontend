@@ -2,14 +2,18 @@
     import { onMount } from 'svelte';
     import { goto } from '$app/navigation';
     import { userManager } from '$lib/cognito';
+    import { setUser } from '$lib/user.svelte';
 
     onMount(async () => {
         try {
             await userManager?.signinRedirectCallback();
-            // Redirect home (replaceState removes ?code&state from URL)
-            goto('/', { replaceState: true });
+            const user = await userManager?.getUser();
+            if (user && !user.expired) {
+                setUser(user);
+            }
         } catch (err) {
             console.error('OIDC callback failed', err);
+        } finally {
             goto('/', { replaceState: true });
         }
     });
