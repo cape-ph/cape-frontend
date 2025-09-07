@@ -1,4 +1,20 @@
 <script lang="ts">
+    import { toaster } from '$lib/toaster';
+    import axios from 'axios';
+    import { onMount } from 'svelte';
+    let { baseUrl } = $props<{ baseUrl: string }>();
+
+    interface PipelineProfile {
+        display_name: string;
+        key: string;
+    }
+    interface Pipeline {
+        display_name: string;
+        pipeline_name: string;
+        pipeline_type: string;
+        version: string;
+        profiles: PipelineProfile[];
+    }
     type Options = Record<string, unknown>;
     type FieldSpec =
         | { type: 'number'; label?: string; min?: number; max?: number; step?: number }
@@ -8,7 +24,12 @@
     type OptionsSchema = { schema: Schema; optionsFieldName: string };
 
     // Form state
+    let pipelineChoices = $state<Record<string, string[]>>();
     let pipelineName = $state('');
+    const pipelineVersionChoices = $derived(
+        pipelineName && pipelineChoices ? (pipelineChoices[pipelineName] ?? []) : []
+    );
+
     let pipelineVersion = $state('');
     let outputPath = $state('');
     const options = $state<Options>({});
@@ -22,16 +43,25 @@
     let updatingFromForm = false;
     let updatingFromJSON = false;
 
+    // if pipelineName changes and current version is invalid, clear it
+    $effect(() => {
+        if (!pipelineVersionChoices.includes(pipelineVersion)) {
+            pipelineVersion = '';
+        }
+    });
+
     // Hard-coded lookup table for now
-    const SCHEMAS: Record<string, OptionsSchema> = {
-        'bactopia/bactopia@v3.2.0': {
-            schema: {
-                max_cpus: { type: 'number', label: 'max_cpus', min: 1, step: 1 },
-                max_memory: { type: 'text', label: 'max_memory', placeholder: '24.GB' },
-                ont: { type: 'text', label: 'ont', placeholder: 's3://.../reads.gz' },
-                sample: { type: 'text', label: 'sample', placeholder: 'abcdefghij' }
-            },
-            optionsFieldName: 'nextflowOptions'
+    const SCHEMAS: Record<string, Record<string, OptionsSchema>> = {
+        'bactopia/bactopia': {
+            'v3.0.1': {
+                schema: {
+                    max_cpus: { type: 'number', label: 'max_cpus', min: 1, step: 1 },
+                    max_memory: { type: 'text', label: 'max_memory', placeholder: '24.GB' },
+                    ont: { type: 'text', label: 'ont', placeholder: 's3://.../reads.gz' },
+                    sample: { type: 'text', label: 'sample', placeholder: 'abcdefghij' }
+                },
+                optionsFieldName: 'nextflowOptions'
+            }
         }
         // Add more pipelines/versions here as needed
     };
@@ -48,8 +78,12 @@
         pipelineName: string,
         pipelineVersion: string
     ): OptionsSchema | undefined {
-        const key = `${pipelineName.trim()}@${pipelineVersion.trim()}`;
-        return SCHEMAS[key];
+        const p = SCHEMAS[pipelineName];
+        if (p) {
+            return p[pipelineVersion];
+        } else {
+            return undefined;
+        }
     }
 
     function setOption(key: string, value: unknown) {
@@ -76,6 +110,38 @@
             .join(' ');
     }
 
+    // Get allowed pipelines / versions
+    function getPipelineChoices(pipelines: Pipeline[]): Record<string, string[]> {
+        const grouped = pipelines.reduce(
+            (acc, p) => {
+                if (!acc[p.pipeline_name]) {
+                    acc[p.pipeline_name] = [];
+                }
+                acc[p.pipeline_name].push(p.version);
+                return acc;
+            },
+            {} as Record<string, string[]>
+        );
+
+        return Object.fromEntries(Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)));
+    }
+
+    async function getPipelines() {
+        try {
+            const url = `${baseUrl}/dap/pipelines`;
+            const response = await axios.get(url);
+            const pipelines: Pipeline[] = response.data;
+            pipelineChoices = getPipelineChoices(pipelines);
+        } catch (err: any) {
+            const message = err instanceof Error ? err.message : String(err);
+            toaster.error({
+                title: `An error occurred while reading the pipelines: ${message}`
+            });
+        }
+    }
+
+    onMount(getPipelines);
+
     // Json
 
     /**
@@ -84,7 +150,6 @@
     function serialize(): string {
         const fieldName = schema?.optionsFieldName;
         const optionsString = getOptionString(options);
-
         const obj: Record<string, unknown> = {
             pipelineName,
             pipelineVersion,
@@ -142,22 +207,40 @@
         <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
             <label class="flex flex-col gap-1">
                 <span class="text-xs opacity-70">pipelineName</span>
-                <input
-                    class="input input-bordered"
-                    type="text"
+                <select
+                    class="select select-bordered"
                     bind:value={pipelineName}
-                    placeholder="bactopia/bactopia"
-                />
+                    aria-label="Select pipeline"
+                >
+                    <option value="" disabled selected={pipelineName === ''}
+                        >Select a pipeline…</option
+                    >
+                    {#if pipelineChoices}
+                        {#each Object.keys(pipelineChoices) as name (name)}
+                            <option value={name}>{name}</option>
+                        {/each}
+                    {/if}
+                </select>
             </label>
 
             <label class="flex flex-col gap-1">
                 <span class="text-xs opacity-70">pipelineVersion</span>
-                <input
-                    class="input input-bordered"
-                    type="text"
+                <select
+                    class="select select-bordered"
                     bind:value={pipelineVersion}
-                    placeholder="v3.2.0"
-                />
+                    disabled={pipelineName === '' || pipelineVersionChoices.length === 0}
+                    aria-label="Select version"
+                >
+                    <option value="" disabled selected={pipelineVersion === ''}>
+                        {pipelineName ? 'Select a version…' : 'Select a pipeline first'}
+                    </option>
+
+                    {#if pipelineVersionChoices.length > 0}
+                        {#each pipelineVersionChoices as v (v)}
+                            <option value={v}>{v}</option>
+                        {/each}
+                    {/if}
+                </select>
             </label>
 
             <label class="flex flex-col gap-1">

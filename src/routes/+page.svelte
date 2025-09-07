@@ -1,5 +1,6 @@
 <script lang="ts">
     import FileUpload from '$lib/components/FileUpload/FileUpload.svelte';
+    import Submit from '$lib/components/Submit/Submit.svelte';
     import LoggingIn from '$lib/components/LoggingIn/LoggingIn.svelte';
     import { auth } from '$lib/user.svelte';
 
@@ -11,10 +12,11 @@
 {#if auth.user}
     <div class="flex h-screen items-center justify-center">
         <div class="w-lg">
-            <FileUpload
+            <!-- <FileUpload
                 baseUrl="https://api.cape-dev.org/capi-dev"
                 bucket="ccd-dlh-t-seqauto-input-raw-vbkt-s3-b8fded5"
-            />
+            /> -->
+            <Submit baseUrl="https://api.cape-dev.org/capi-dev"/>
         </div>
     </div>
 {:else}
