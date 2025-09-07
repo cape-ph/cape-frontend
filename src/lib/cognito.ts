@@ -1,32 +1,17 @@
-import { UserManager } from 'oidc-client-ts';
+import { UserManager, WebStorageStateStore } from 'oidc-client-ts';
 import type { UserManagerSettings } from 'oidc-client-ts';
 import { PUBLIC_COGNITO_AUTHORITY, PUBLIC_COGNITO_CLIENT_ID, PUBLIC_CONGNITO_REDIRECT_URI } from './env';
+import { browser } from '$app/environment';
 
-// import { env } from '$env/dynamic/public';
 
-
-// function envar(variable: string, value: string | undefined): string {
-//     if (value === undefined) {
-//         throw new Error(`Missing environment variable ${variable}`);
-//     }
-//     return value;
-// }
-
-// // Check for required envars
-// const PUBLIC_COGNITO_AUTHORITY = envar('PUBLIC_COGNITO_AUTHORITY', env.PUBLIC_COGNITO_AUTHORITY);
-// const PUBLIC_COGNITO_CLIENT_ID = envar('PUBLIC_COGNITO_CLIENT_ID', env.PUBLIC_COGNITO_CLIENT_ID);
-// const PUBLIC_CONGNITO_REDIRECT_URI = envar(
-//     'PUBLIC_CONGNITO_REDIRECT_URI',
-//     env.PUBLIC_COGNITO_REDIRECT_URI
-// );
-
-const config: UserManagerSettings = {
+const config: UserManagerSettings | undefined = (browser) ? {
     authority: PUBLIC_COGNITO_AUTHORITY,
     client_id: PUBLIC_COGNITO_CLIENT_ID,
     redirect_uri: PUBLIC_CONGNITO_REDIRECT_URI,
     response_mode: 'query',
     response_type: 'code',
-    scope: 'email openid phone'
-};
+    scope: 'email openid',
+    userStore: new WebStorageStateStore({ store: window.localStorage })
+} : undefined;
 
-export const userManager = new UserManager(config);
+export const userManager = (config) ? new UserManager(config) : undefined;
