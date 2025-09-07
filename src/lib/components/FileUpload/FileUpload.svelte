@@ -151,22 +151,24 @@
     </FileUpload>
 
     {#if items}
-        <ul class="space-y-2 mt-2">
+        <ul class="mt-2 space-y-2">
             {#each items as it (it.id)}
                 <li class="preset-tonal rounded-base gap-4 px-4 py-2">
                     <!-- Row 1: name + bytes -->
-                    <div class="flex items-center justify-between gap-3">
+                    <div class="flex w-full items-center justify-between gap-3">
                         <div class="min-w-0 truncate text-sm font-medium">{it.file.name}</div>
-                        <div class="text-surface-500 text-xs">
-                            {humanReadable(it.bytesSent)} / {humanReadable(it.totalBytes)}
+                        <div class="flex shrink-0 items-center gap-2">
+                            <div class="text-surface-500 text-xs whitespace-nowrap">
+                                {humanReadable(it.bytesSent)} / {humanReadable(it.totalBytes)}
+                            </div>
+                            <button
+                                class="btn-icon p-0"
+                                onclick={() => handleCancelUpload(it)}
+                                aria-label="Cancel upload"
+                            >
+                                <CircleX class="size-4" />
+                            </button>
                         </div>
-                        <button
-                            class="btn btn-sm preset-ghost error"
-                            onclick={() => handleCancelUpload(it)}
-                            aria-label="Cancel upload"
-                        >
-                            <CircleX class="size-4" />
-                        </button>
                     </div>
 
                     <!-- Row 2: progress bar -->
