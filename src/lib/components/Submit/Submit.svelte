@@ -194,11 +194,6 @@
             {} as Record<string, string[]>
         );
 
-        // TODO: bactopia/bactopia@3.2.0 is installed but not registered in the api
-        if (!grouped['bactopia/bactopia'].includes('v3.2.0')) {
-            grouped['bactopia/bactopia'].push('v3.2.0')
-        }
-
         return Object.fromEntries(Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)));
     }
 
