@@ -13,7 +13,7 @@ const abortMpuUrl = (base: string) => `${base}/objstorage/abortmpu`;
  */
 
 const DEFAULT_PART_SIZE = 10 * 1024 * 1024;  // 10 MB
-const DEFAULT_NUM_RETRIES = 10;
+const DEFAULT_NUM_RETRIES = 3;
 
 /**
  * Parameters used in the multi-part upload API
@@ -54,7 +54,7 @@ export type Agent = unknown;
 export async function multiPartUpload(
     file: Blob,
     params: MultipartUploadParams
-): Promise<MultipartUploadResult> {
+): Promise<MultipartUploadResult | undefined> {
     const uploadId = await createMultipartUpload(params);
     try {
         const result = await sendMultipartUpload(file, uploadId, params);
@@ -120,12 +120,14 @@ export async function sendMultipartUpload(
     file: Blob,
     uploadId: string,
     params: MultipartUploadParams
-): Promise<MultipartUploadResult> {
+): Promise<MultipartUploadResult | undefined> {
     const { partSize, numParts } = splitMultipartUpload(file, params);
     const urls = await openMultipartUpload(uploadId, numParts, params);
     const parts = await doMultipartUpload(file, partSize, urls, params);
-    const result = await completeMultipartUpload(uploadId, parts, params);
-    return result;
+    if (!(params.signal && params.signal.aborted)) {
+        const result = await completeMultipartUpload(uploadId, parts, params);
+        return result;
+    }
 }
 
 
@@ -318,6 +320,10 @@ async function doMultipartUpload(
         const partSize = part.size;
 
         while (true) {
+            if (parameters.signal && parameters.signal.aborted) {
+                break;
+            }
+
             attempt += 1;
             try {
                 const resp = await axios.put(url, part, {
@@ -357,7 +363,7 @@ async function doMultipartUpload(
                     }
                 }
 
-                if (attempt <= numRetries && shouldRetry(resp.status)) {
+                if (attempt < numRetries && shouldRetry(resp.status)) {
                     await sleep(backoff(attempt));
                     continue;
                 }

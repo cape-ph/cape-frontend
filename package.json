@@ -56,7 +56,6 @@
         "axios": "^1.11.0",
         "drizzle-orm": "^0.40.0",
         "fast-xml-parser": "^5.2.5",
-        "flowbite-svelte": "^1.13.7",
         "postgres": "^3.4.5"
     }
 }

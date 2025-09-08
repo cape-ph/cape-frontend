@@ -5,7 +5,6 @@
     import { auth } from '$lib/user.svelte';
 
     import Navbar from '$lib/components/Navbar/Navbar.svelte';
-    import Menu from '$lib/components/Menu/Menu.svelte';
     import logo from '$lib/images/wordmark-color.svg';
 
     let activeKey = $state('upload');
@@ -21,10 +20,9 @@
 </script>
 
 {#if auth.user}
-    <Navbar {logo} user={auth.user} />
-    <Menu {links} {activeKey} {onSelect} />
+    <Navbar {logo} user={auth.user} {links} {activeKey} {onSelect}  />
     <main>
-        <div class="flex h-screen items-center justify-center">
+        <div class="flex h-screen justify-center mt-8">
             <div class="w-lg">
                 {#if activeKey === 'upload'}
                     <FileUpload

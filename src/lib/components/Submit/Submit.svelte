@@ -297,6 +297,11 @@
     }
 </script>
 
+<div class="mb-4 space-y-2">
+    <h2 class="text-2xl font-semibold text-primary-500">Submit Pipeline</h2>
+</div>
+
+
 <div class="space-y-6">
     <!-- A. Pipeline -->
     <section class="space-y-3">

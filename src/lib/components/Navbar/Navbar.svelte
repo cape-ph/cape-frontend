@@ -1,44 +1,53 @@
 <script lang="ts">
-    import { Navbar, NavBrand, Avatar } from 'flowbite-svelte';
     import type { User } from 'oidc-client-ts';
+    import Menu from '../Menu/Menu.svelte';
 
-    let { 
+    const {
         user,
-        logo = ''
+        logo = '',
+        links,
+        activeKey,
+        onSelect
     }: {
-        user: User
-        logo: string
+        user: User;
+        logo?: string;
+        links: { key: string; label: string }[];
+        activeKey: string;
+        onSelect: (key: string) => void;
     } = $props();
 
     const email = user.profile.email;
     let avatarUrl: string | null = $state(null);
 </script>
 
-<Navbar>
-    <NavBrand href="/">
-        <img src={logo} class="me-3 h-12 sm:h-12" alt="Cape Logo" />
-    </NavBrand>
-    <div class="flex md:order-2 items-center">
-        <div class="flex user gap-4">
-            <div class="flex items-center">
+<nav class="border-surface-200-800 bg-gradient-to-b from-surface-200-800 to-surface-100-900 w-full border-b">
+    <div class="container mx-auto flex h-14 items-center justify-between px-4">
+        <!-- Brand -->
+        <a href="/" class="flex items-center gap-2">
+            <img src={logo} alt="Cape Logo" class="h-10 sm:h-12" />
+        </a>
+
+        <!-- Menu -->
+        <Menu {links} {activeKey} {onSelect}/>
+
+        <!-- User section -->
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2">
                 {#if avatarUrl}
-                    <Avatar src={avatarUrl} />
+                    <img
+                        src={avatarUrl}
+                        alt="User avatar"
+                        class="h-8 w-8 rounded-full object-cover"
+                    />
                 {:else}
-                    <Avatar />
+                    <div
+                        class="bg-surface-300-700 text-surface-600-200 flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold"
+                    >
+                        {email?.[0]?.toUpperCase()}
+                    </div>
                 {/if}
-                <span>{email}</span>
-                <!-- <ChevronDownOutline class="w-6 h-6 ms-2" /> -->
+                <span class="ml-2 text-sm">{email}</span>
             </div>
         </div>
     </div>
-</Navbar>
-
-<style>
-    span {
-        margin-left: 1em;
-    }
-
-    .user {
-        margin-left: 1em;
-    }
-</style>
+</nav>

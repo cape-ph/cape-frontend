@@ -1,15 +1,15 @@
 <script lang="ts">
-    import { page } from '$app/state';
-
     // Props
     const {
         links,
         activeKey,
-        onSelect
+        onSelect,
+        buttonClass = "text-primary-700 rounded-base hover:preset-tonal"
     }: {
         links: { key: string; label: string }[];
         activeKey: string;
         onSelect: (key: string) => void;
+        buttonClass?: string;
     } = $props();
 
     let open = $state(false);
@@ -20,7 +20,7 @@
     }
 </script>
 
-<nav class="border-surface-200-800 bg-surface-50-950 w-full border-b">
+<nav class="w-full">
     <div class="container mx-auto px-4">
         <div class="flex h-14 items-center justify-between">
             <!-- Desktop links -->
@@ -31,8 +31,8 @@
                             type="button"
                             onclick={() => select(item.key)}
                             aria-current={activeKey === item.key ? 'page' : undefined}
-                            class="rounded-base hover:preset-tonal px-3 py-2 text-sm transition
-                     {activeKey === item.key ? 'border-b-2 font-semibold' : 'opacity-90'}"
+                            class="{buttonClass} px-3 py-2 text-sm transition
+                     {activeKey === item.key ? 'font-semibold' : 'opacity-90'}"
                         >
                             {item.label}
                         </button>
