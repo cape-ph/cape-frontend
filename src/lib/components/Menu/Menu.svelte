@@ -1,40 +1,78 @@
 <script lang="ts">
-    import { Navbar, NavUl, NavLi } from 'flowbite-svelte';
+    import { page } from '$app/state';
 
-    let activeClass = 'nav-item active';
-    let nonActiveClass = 'nav-item';
+    // Props
+    const {
+        links,
+        activeKey,
+        onSelect
+    }: {
+        links: { key: string; label: string }[];
+        activeKey: string;
+        onSelect: (key: string) => void;
+    } = $props();
+
+    let open = $state(false);
+
+    function select(key: string) {
+        onSelect?.(key);
+        open = false;
+    }
 </script>
 
-<Navbar class="flex h-10 items-center">
-    <NavUl {activeClass} {nonActiveClass}>
-        <NavLi href="/" class=".">
-            <div>Launchpad</div>
-        </NavLi>
-        <NavLi href="/runs"><div>Runs</div></NavLi>
-        <NavLi href="/compute"><div>Compute Environments</div></NavLi>
-        <NavLi href="/about"><div>About</div></NavLi>
-    </NavUl>
-</Navbar>
-<hr />
+<nav class="border-surface-200-800 bg-surface-50-950 w-full border-b">
+    <div class="container mx-auto px-4">
+        <div class="flex h-14 items-center justify-between">
+            <!-- Desktop links -->
+            <ul class="hidden gap-4 md:flex">
+                {#each links as item (item.key)}
+                    <li>
+                        <button
+                            type="button"
+                            onclick={() => select(item.key)}
+                            aria-current={activeKey === item.key ? 'page' : undefined}
+                            class="rounded-base hover:preset-tonal px-3 py-2 text-sm transition
+                     {activeKey === item.key ? 'border-b-2 font-semibold' : 'opacity-90'}"
+                        >
+                            {item.label}
+                        </button>
+                    </li>
+                {/each}
+            </ul>
 
-<style lang="postcss">
-    @reference '../../../app.css'
+            <!-- Mobile toggle -->
+            <button
+                class="btn btn-sm preset-ghost md:hidden"
+                aria-expanded={open}
+                aria-controls="mobile-nav"
+                onclick={() => (open = !open)}
+            >
+                <!-- Simple hamburger -->
+                <div class="flex flex-col gap-1.5">
+                    <span class="block h-[2px] w-5 bg-current"></span>
+                    <span class="block h-[2px] w-5 bg-current"></span>
+                    <span class="block h-[2px] w-5 bg-current"></span>
+                </div>
+            </button>
+        </div>
 
-    :global(.nav-item) div {
-        @apply dark:text-gray-200 border-secondary-100 bg-transparent flex h-10 items-center;
-        font-weight: 400;
-        padding-bottom: 2px;
-        letter-spacing: 0.0375em;
-    }
-
-    :global(.nav-item):hover {
-        text-decoration: none;
-    }
-
-    :global(.active) div {
-        @apply font-bold border-b-2;
-        letter-spacing: 0em;
-        padding-bottom: 0px;
-        text-decoration: none;
-    }
-</style>
+        <!-- Mobile menu -->
+        <div id="mobile-nav" class="{open ? 'block' : 'hidden'} pb-3 md:hidden">
+            <ul class="flex flex-col gap-1">
+                {#each links as item (item.key)}
+                    <li>
+                        <button
+                            type="button"
+                            onclick={() => select(item.key)}
+                            aria-current={activeKey === item.key ? 'page' : undefined}
+                            class="rounded-base hover:preset-tonal w-full px-3 py-2 text-left text-sm transition
+                     {activeKey === item.key ? 'border-b-2 font-semibold' : 'opacity-90'}"
+                        >
+                            {item.label}
+                        </button>
+                    </li>
+                {/each}
+            </ul>
+        </div>
+    </div>
+</nav>

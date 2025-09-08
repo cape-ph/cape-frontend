@@ -5,10 +5,7 @@
     import { toaster } from '$lib/toaster';
     import { onMount } from 'svelte';
     import { userManager } from '$lib/cognito';
-    import { auth, setUser } from '$lib/user.svelte';
-    import Navbar from '$lib/components/Navbar/Navbar.svelte';
-    import Menu from '$lib/components/Menu/Menu.svelte';
-    import logo from '$lib/images/wordmark-color.svg';
+    import { setUser } from '$lib/user.svelte';
 
     // slot
     let { children } = $props();
@@ -29,14 +26,6 @@
     });
 </script>
 
+{@render children()}
 
-{#if auth.user}
-    <Navbar {logo} user={auth.user}/>
-    <Menu />
-    <main>
-        {@render children()}
-    </main>
-{:else}
-    {@render children()}
-{/if}
 <Toaster {toaster} />

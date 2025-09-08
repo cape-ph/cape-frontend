@@ -3,19 +3,43 @@
     import Submit from '$lib/components/Submit/Submit.svelte';
     import LoggingIn from '$lib/components/LoggingIn/LoggingIn.svelte';
     import { auth } from '$lib/user.svelte';
+
+    import Navbar from '$lib/components/Navbar/Navbar.svelte';
+    import Menu from '$lib/components/Menu/Menu.svelte';
+    import logo from '$lib/images/wordmark-color.svg';
+
+    let activeKey = $state('upload');
+
+    const links = [
+        { key: 'upload', label: 'Upload' },
+        { key: 'submit', label: 'Submit' }
+    ];
+
+    function onSelect(key: string) {
+        activeKey = key;
+    }
 </script>
 
 {#if auth.user}
-    <div class="flex h-screen items-center justify-center">
-        <div class="w-lg">
-            <!-- <FileUpload
-                baseUrl="https://api.cape-dev.org/capi-dev"
-                bucket="ccd-dlh-t-seqauto-input-raw-vbkt-s3-b8fded5"
-            /> -->
-            <Submit baseUrl="https://api.cape-dev.org/capi-dev"
-                bucketURI='s3://ccd-dlh-t-seqauto-result-raw-vbkt-s3-1e80821/pipeline-output'/>
+    <Navbar {logo} user={auth.user} />
+    <Menu {links} {activeKey} {onSelect} />
+    <main>
+        <div class="flex h-screen items-center justify-center">
+            <div class="w-lg">
+                {#if activeKey === 'upload'}
+                    <FileUpload
+                        baseUrl="https://api.cape-dev.org/capi-dev"
+                        bucket="ccd-dlh-t-seqauto-input-raw-vbkt-s3-b8fded5"
+                    />
+                {:else if activeKey === 'submit'}
+                    <Submit
+                        baseUrl="https://api.cape-dev.org/capi-dev"
+                        bucketURI="s3://ccd-dlh-t-seqauto-result-raw-vbkt-s3-1e80821/pipeline-output"
+                    />
+                {/if}
+            </div>
         </div>
-    </div>
+    </main>
 {:else}
     <div class="flex h-screen items-center justify-center">
         <div class="w-lg">
