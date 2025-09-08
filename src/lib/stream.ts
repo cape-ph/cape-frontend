@@ -96,7 +96,7 @@ export function tarPack(meta: SampleMeta, files: File[]): tar.Pack {
 
 
 export async function* chunkStream(
-    nodeStream: Readable,
+    nodeStream: AsyncIterable<Uint8Array, Buffer>,
     chunkSize: number
 ): AsyncGenerator<Uint8Array> {
     let buffer = Buffer.alloc(0);

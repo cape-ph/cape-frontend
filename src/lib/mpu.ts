@@ -47,15 +47,18 @@ export type OnProgress = (
     }
 ) => void;
 
+export type ChunkStream = AsyncGenerator<Uint8Array, void, unknown>;
+
 export type Agent = unknown;
 
 export async function multiPartUpload(
-    file: Blob,
+    stream: ChunkStream,
+    streamSize: number,
     params: MultipartUploadParams
 ): Promise<MultipartUploadResult | undefined> {
     const uploadId = await createMultipartUpload(params);
     try {
-        const result = await sendMultipartUpload(file, uploadId, params);
+        const result = await sendMultipartUpload(stream, streamSize, uploadId, params);
         return result;
     } catch (err: any) {
         await abortMultipartUpload(uploadId, params);
@@ -112,13 +115,16 @@ export async function createMultipartUpload({
 }
 
 export async function sendMultipartUpload(
-    file: Blob,
+    stream: ChunkStream,
+    streamSize: number,
     uploadId: string,
     params: MultipartUploadParams
 ): Promise<MultipartUploadResult | undefined> {
-    const { partSize, numParts } = splitMultipartUpload(file, params);
+
+    const partSize = DEFAULT_PART_SIZE;
+    const numParts = Math.ceil(streamSize / partSize);
     const urls = await openMultipartUpload(uploadId, numParts, params);
-    const parts = await doMultipartUpload(file, partSize, urls, params);
+    const parts = await doMultipartUpload(stream, streamSize, partSize, urls, params);
     if (!(params.signal && params.signal.aborted)) {
         const result = await completeMultipartUpload(uploadId, parts, params);
         return result;
@@ -166,18 +172,6 @@ export async function abortMultipartUpload(
 }
 
 /** Private functions ====================================================== */
-
-function splitMultipartUpload(
-    file: Blob,
-    { partSize = DEFAULT_PART_SIZE }: MultipartUploadParams
-): { partSize: number; numParts: number } {
-    const size = normalizePartSize(file, partSize);
-    const numParts = getNumParts(file, size);
-    if (!Number.isInteger(numParts) || numParts <= 0) {
-        throw new RangeError(`numParts must be a positive integer, got ${numParts}`);
-    }
-    return { partSize: size, numParts };
-}
 
 interface PartUrl {
     partNumber: number;
@@ -255,34 +249,23 @@ function shouldRetry(status: number) {
 }
 
 async function doMultipartUpload(
-    file: Blob,
+    stream: ChunkStream,
+    streamSize: number,
     partSize: number,
     urls: PartUrl[],
     parameters: MultipartUploadParams
 ): Promise<UploadedPart[]> {
     const { httpsAgent, signal, onProgress, numRetries = DEFAULT_NUM_RETRIES } = parameters;
-
-    // sanity check: ensure ascending partNumber 1..N
-    for (let i = 0; i < urls.length; i++) {
-        const expectedPartNumber = i + 1;
-        if (urls[i].partNumber !== expectedPartNumber) {
-            throw new Error(
-                `Urls not in ascending order or missing numbers; ` +
-                    `found partNumber=${urls[i].partNumber}, expected ${expectedPartNumber}`
-            );
-        }
-    }
-
     const uploaded: UploadedPart[] = [];
-    const numParts = getNumParts(file, partSize);
-    const totalBytes = file.size;
+    const numParts = urls.length;
+    const totalBytes = streamSize;
     let bytesSent = 0;
+    let index = 0;
 
-    for (const { index, part } of iterateFileChunks(file, partSize)) {
+    for await (const chunk of stream) {
         const { partNumber, url } = urls[index];
         let attempt = 0;
         let perLoaded = 0;
-        const partSize = part.size;
 
         while (true) {
             if (parameters.signal && parameters.signal.aborted) {
@@ -291,8 +274,7 @@ async function doMultipartUpload(
 
             attempt += 1;
             try {
-                const resp = await axios.put(url, part, {
-                    validateStatus: () => true,
+                const resp = await axios.put(url, chunk, {
                     maxBodyLength: Infinity,
                     maxContentLength: Infinity,
                     httpsAgent,
@@ -357,6 +339,8 @@ async function doMultipartUpload(
                 );
             }
         }
+
+        index += 1;
     }
 
     return uploaded;
@@ -414,59 +398,4 @@ async function completeMultipartUpload(
         checksum: CompleteMultipartUploadResult.ChecksumCRC64NVME,
         checksumType: CompleteMultipartUploadResult.ChecksumType
     };
-}
-
-/** S3 Multi-Part Upload size limits  */
-const S3_MIN_PART_SIZE = 5 * 1024 * 1024; // 5 MiB
-const S3_MAX_PARTS = 10_000;
-
-/**
- * Normalize a desired chunk size so it respects common S3 MPU limits:
- */
-function normalizePartSize(file: Blob, desired: number): number {
-    if (!Number.isFinite(desired) || desired <= 0) {
-        throw new RangeError(`chunkSize must be a positive integer, got ${desired}`);
-    }
-    const minByRule = S3_MIN_PART_SIZE;
-    const minByCount = Math.ceil(file.size / S3_MAX_PARTS) || 0;
-    return Math.max(desired, minByRule, minByCount);
-}
-
-/**
- * Compute how many parts are needed to cover the file.
- */
-function getNumParts(file: Blob, size: number): number {
-    if (!Number.isFinite(size) || size <= 0) {
-        throw new RangeError(`chunkSize must be a positive integer, got ${size}`);
-    }
-    return file.size === 0 ? 0 : Math.ceil(file.size / size);
-}
-
-function* iterateFileChunks(
-    file: Blob,
-    chunkSize: number
-): Generator<
-    {
-        index: number;
-        start: number;
-        end: number;
-        isLast: boolean;
-        part: Blob;
-    },
-    void,
-    unknown
-> {
-    if (!Number.isFinite(chunkSize) || chunkSize <= 0) {
-        throw new RangeError(`chunkSize must be a positive integer, got ${chunkSize}`);
-    }
-    if (file.size === 0) return;
-
-    const total = Math.ceil(file.size / chunkSize);
-    for (let index = 0; index < total; index++) {
-        const start = index * chunkSize;
-        const end = Math.min(start + chunkSize, file.size);
-        const isLast = end === file.size;
-        const part = file.slice(start, end);
-        yield { index, start, end, isLast, part };
-    }
 }

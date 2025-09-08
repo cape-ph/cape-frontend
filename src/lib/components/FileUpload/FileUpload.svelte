@@ -1,163 +1,135 @@
 <script lang="ts">
     import { toaster } from '$lib/toaster';
     import { FileUpload } from '@skeletonlabs/skeleton-svelte';
-    import type { FileAcceptDetails, FileRejectDetails, Api } from '@zag-js/file-upload';
     import { multiPartUpload } from '$lib/mpu';
-    import type { OnProgress, MultipartUploadResult } from '$lib/mpu';
+    import { tarSize, tarPack, chunkStream } from '$lib/stream';
+    import FileUploadProgress from './FileUploadProgress.svelte';
+    import type { OnProgress } from '$lib/mpu';
+    import { itemProps, type Api } from '@zag-js/file-upload';
+    import type { Upload, RejectFile } from './types';
 
     import ImagePlus from '@lucide/svelte/icons/image-plus';
-    import CircleX from '@lucide/svelte/icons/circle-x';
-
     let { baseUrl, bucket } = $props<{ baseUrl: string; bucket: string }>();
 
-    type UploadItem = {
-        id: string; // Stable key for list rendering
-        file: File; // Handle to the file to upload
-        key: string; // Destination S3 key
-        bytesSent: number;
-        totalBytes: number;
-        result?: MultipartUploadResult;
-        controller?: AbortController;
-    };
-
     let api = $state<Api | undefined>(undefined);
-    let items = $state<UploadItem[] | undefined>();
+    let upload = $state<Upload>({
+        state: 'pending',
+        bytesSent: 0,
+        totalBytes: 0
+    });
     let sampleId = $state('');
     let sampleType = $state('');
     let sampleMatrix = $state('');
     let sampleCollectionDate = $state<Date>(new Date());
+    const components = $derived(api?.acceptedFiles ?? []);
+    const filename = $derived(`sample-${sampleId}.tar`);
 
-    const fmt = (d: Date) => d.toISOString().slice(0, 10);           // Date -> "YYYY-MM-DD"
-    const parse = (s: string) => (s ? new Date(s + 'T00:00:00') : undefined); // string -> Date
+    // Date formatting
+    const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
+    const parseDate = (s: string) => (s ? new Date(s + 'T00:00:00') : undefined);
 
-    function getId(file: File): string {
-        return `${crypto.randomUUID()}`;
-    }
-
-    function getKey(file: File): string {
-        return `unprocessed/${file.name}`;
-    }
-
-    function isUploaded(item: UploadItem): boolean {
-        return item.bytesSent >= item.totalBytes;
-    }
-
-    function handleFileAccept(details: FileAcceptDetails) {
-        items = details.files.map((file) => {
-            return {
-                id: getId(file),
-                file: file,
-                key: getKey(file),
-                bytesSent: 0,
-                totalBytes: file.size
-            };
-        });
-    }
-
-    function handleFileReject(details: FileRejectDetails) {
-        for (const rejection of details.files) {
-            toaster.error({
-                title: `Rejected file ${rejection.file.name}`
-            });
+    /**
+     * Check that the file is a .fastq.gz file
+     * @param file - the file to check
+     */
+    function validateFile(file: File) {
+        if (!file.name.endsWith('.fastq.gz')) {
+            return ['NOT_A_FASTQ_GZ_FILE'];
         }
+        return null;
     }
 
-    // async function onUpload() {
-    //     if (!items || items.length === 0) {
-    //         toaster.error({
-    //             title: 'No files selected'
-    //         });
-    //         return;
-    //     }
-
-    //     for (const item of items) {
-    //         if (item.file)
-    //     }
-    // }
-
-    async function onUploadFile() {
-        if (!items || items.length === 0) {
-            toaster.error({
-                title: 'No file selected'
-            });
-            return;
-        } else {
-            for (const item of items) {
-                if (isUploaded(item)) {
-                    continue;
-                }
-
-                const abortController = new AbortController();
-                item.controller = abortController;
-
-                const onProgress: OnProgress = (bytesSent, totalBytes, ctx) => {
-                    item.bytesSent = bytesSent;
-                    item.totalBytes = totalBytes;
-                };
-
-                try {
-                    const res = await multiPartUpload(item.file, {
-                        baseUrl: baseUrl,
-                        bucket: bucket,
-             
-                        key: item.key,
-                        signal: item.controller.signal,
-                        onProgress: onProgress
-                    });
-
-                    item.result = res;
-                    if (res !== undefined) {
-                        toaster.success({
-                            title: `Upload ${item.file.name} completed.`
-                        });
-                    }
-                } catch (err: any) {
-                    if (err?.name === 'CanceledError') {
-                        toaster.info({
-                            title: `Upload ${item.file.name} canceled.`
-                        });
-                    } else {
-                        const message = err instanceof Error ? err.message : String(err);
-                        toaster.error({
-                            title: `An error occurred while uploading ${item.file.name}: ${message}`
-                        });
-                        console.error(err);
-                    }
-                } finally {
-                    item.controller = undefined;
-                }
-            }
-        }
-    }
-
-    function handleCancelUpload(item: UploadItem) {
-        if (item.bytesSent < item.totalBytes) {
-            item.controller?.abort?.();
-        }
-
-        api?.deleteFile(item.file);
-        if (items != undefined) {
-            items = items.filter((x) => x.id !== item.id);
-            if (item.bytesSent < item.totalBytes) {
-                toaster.info({
-                    title: `Upload ${item.file.name} canceled.`
+    /**
+     * Callback triggered if a file fails validation
+     */
+    function onFileReject({ files }: { files: RejectFile[] }) {
+        for (const rejection of files) {
+            if (rejection.errors.includes('NOT_A_FASTQ_GZ_FILE')) {
+                toaster.error({
+                    title: `${rejection.file.name} is not a *.fastq.gz file`
                 });
             }
         }
     }
 
-    function humanReadable(n = 0) {
-        const u = ['B', 'KB', 'MB', 'GB', 'TB'];
-        let i = 0;
-        while (n >= 1024 && i < u.length - 1) {
-            n /= 1024;
-            i++;
+    /**
+     * Callback triggered when the upload button is pressed
+     */
+    async function onUpload() {
+        if (components.length === 0) {
+            toaster.error({
+                title: 'No file selected'
+            });
+            return;
         }
-        return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
+
+        // Pre-compute the size of the final tar file
+        upload.state = 'building';
+        const meta = {
+            sampleId,
+            sampleType,
+            sampleMatrix,
+            sampleCollectionDate: fmtDate(sampleCollectionDate)
+        };
+        const size = tarSize(meta, components);
+        upload.totalBytes = size;
+
+        // Create an abort controller.  This lets users abort the upload
+        // if they click a button.
+        const abortController = new AbortController();
+        upload.controller = abortController;
+
+        // Create the tar stream
+        const chunkSize = 10 * 1024 * 1024;
+        const pack = tarPack(meta, components);
+        const stream = chunkStream(pack, chunkSize);
+
+        const onProgress: OnProgress = (bytesSent, totalBytes, ctx) => {
+            upload.bytesSent = bytesSent;
+            upload.totalBytes = totalBytes;
+        };
+
+        try {
+            upload.state = "uploading";
+            const res = await multiPartUpload(stream, size, {
+                baseUrl: baseUrl,
+                bucket: bucket,
+                key: `unprocessed/${filename}`,
+                signal: upload.controller.signal,
+                onProgress: onProgress
+            });
+            if (res !== undefined) {
+                upload.state = "complete";
+                toaster.success({
+                    title: `Upload ${filename} completed.`
+                });
+            }
+        } catch (err: any) {
+            if (err?.name === 'CanceledError') {
+                toaster.info({
+                    title: `Upload ${filename} canceled.`
+                });
+            } else {
+                const message = err instanceof Error ? err.message : String(err);
+                toaster.error({
+                    title: `An error occurred while uploading ${filename}: ${message}`
+                });
+                console.error(err);
+            }
+        } finally {
+            upload.controller = undefined;
+        }
     }
 
-    const pct = (it: UploadItem) =>
-        it.totalBytes ? Math.min(100, Math.floor((it.bytesSent / it.totalBytes) * 100)) : 0;
+    function onCancel(upload: Upload) {
+        if (upload.bytesSent < upload.totalBytes) {
+            upload.controller?.abort?.();
+            toaster.info({
+                title: `Upload of ${filename} canceled.`
+            })
+        }
+    }
+
 </script>
 
 <div class="mb-4 space-y-2">
@@ -200,9 +172,9 @@
                 <input
                     class="input input-bordered"
                     type="date"
-                    value={fmt(sampleCollectionDate)}
+                    value={fmtDate(sampleCollectionDate)}
                     oninput={(e) =>
-                        (sampleCollectionDate = parse(
+                        (sampleCollectionDate = parseDate(
                             (e.currentTarget as HTMLInputElement).value
                         )!)}
                     aria-label="Sample Collection Date"
@@ -213,61 +185,23 @@
 
     <!-- File input -->
     <section class="space-y-3">
-        <h2 class="text-lg font-semibold">FASTA Files</h2>
+        <h2 class="text-lg font-semibold">FASTQ Files</h2>
         <FileUpload
             name="file"
-            onFileAccept={handleFileAccept}
-            onFileReject={handleFileReject}
+            maxFiles={1000}
+            validate={validateFile}
             onApiReady={(x) => (api = x)}
-            interfaceBg="bg-surface-50-950"
-            filesListBase="hidden"
-            subtext="Attach *.fasta.gz files"
+            {onFileReject}
+            interfaceBg="bg-surface-150-950"
+            filesListBase="mt-2 max-h-40 overflow-y-auto space-y-1"
+            subtext="Attach *.fastq.gz files"
         >
             {#snippet iconInterface()}
                 <ImagePlus class="size-8" />
             {/snippet}
         </FileUpload>
-
-        {#if items}
-            <ul class="mt-2 space-y-2">
-                {#each items as it (it.id)}
-                    <li class="preset-tonal rounded-base gap-4 px-4 py-2">
-                        <!-- Row 1: name + bytes -->
-                        <div class="flex w-full items-center justify-between gap-3">
-                            <div class="min-w-0 truncate text-sm font-medium">{it.file.name}</div>
-                            <div class="flex shrink-0 items-center gap-2">
-                                <div class="text-surface-500 text-xs whitespace-nowrap">
-                                    {humanReadable(it.bytesSent)} / {humanReadable(it.totalBytes)}
-                                </div>
-                                <button
-                                    class="btn-icon p-0"
-                                    onclick={() => handleCancelUpload(it)}
-                                    aria-label="Cancel upload"
-                                >
-                                    <CircleX class="size-4" />
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Row 2: progress bar -->
-                        <div
-                            class="bg-surface-200/60 dark:bg-surface-800/60 mt-2 h-2 w-full overflow-hidden rounded"
-                            role="progressbar"
-                            aria-valuemin="0"
-                            aria-valuemax="100"
-                            aria-valuenow={pct(it)}
-                            aria-label={`Uploading ${it.file.name}`}
-                        >
-                            <div
-                                class="bg-primary-500 dark:bg-primary-400 h-full transition-[width] duration-200"
-                                style={`width:${pct(it)}%`}
-                            ></div>
-                        </div>
-                    </li>
-                {/each}
-            </ul>
-        {/if}
     </section>
 
-    <button class="btn preset-filled-primary-500 mt-2" onclick={onUploadFile}> Upload </button>
+    <FileUploadProgress {filename} {upload} {onCancel} />
+    <button class="btn preset-filled-primary-500 mt-2" onclick={onUpload}> Upload </button>
 </div>
