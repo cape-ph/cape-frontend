@@ -1,32 +1,30 @@
 import axios, { CanceledError } from 'axios';
 import { XMLParser } from 'fast-xml-parser';
 
-
 const createMpuUrl = (base: string) => `${base}/objstorage/creatempu`;
 const partUrlsUrl = (base: string) => `${base}/objstorage/parturls`;
 const completeMpuUrl = (base: string) => `${base}/objstorage/completempu`;
 const abortMpuUrl = (base: string) => `${base}/objstorage/abortmpu`;
 
-
 /**
  * Multi-part upload management.
  */
 
-const DEFAULT_PART_SIZE = 10 * 1024 * 1024;  // 10 MB
+const DEFAULT_PART_SIZE = 10 * 1024 * 1024; // 10 MB
 const DEFAULT_NUM_RETRIES = 3;
 
 /**
  * Parameters used in the multi-part upload API
  */
 export interface MultipartUploadParams {
-    baseUrl: string,
-    bucket: string,
-    key: string,
-    partSize?: number,
-    numRetries?: number,
-    signal?: AbortSignal,
-    onProgress?: OnProgress,
-    httpsAgent?: Agent
+    baseUrl: string;
+    bucket: string;
+    key: string;
+    partSize?: number;
+    numRetries?: number;
+    signal?: AbortSignal;
+    onProgress?: OnProgress;
+    httpsAgent?: Agent;
 }
 
 export interface MultipartUploadResult {
@@ -42,10 +40,10 @@ export type OnProgress = (
     bytesSent: number,
     totalBytes: number,
     ctx: {
-        partNumber: number,
-        numParts: number,
-        partSize: number,
-        attempt: number
+        partNumber: number;
+        numParts: number;
+        partSize: number;
+        attempt: number;
     }
 ) => void;
 
@@ -65,13 +63,11 @@ export async function multiPartUpload(
     }
 }
 
-
 /** XML parser to parse AWS MPU responses */
 const parser = new XMLParser({
     ignoreDeclaration: true,
-    ignoreAttributes: false,
+    ignoreAttributes: false
 });
-
 
 /**
  * Creates a new multipart upload request for an object in the specified bucket.
@@ -92,20 +88,20 @@ const parser = new XMLParser({
  * @throws {Error} If the service response does not contain a valid `UploadId`.
  * @throws {Error} If the request fails (network error, invalid credentials, etc.).
  */
-export async function createMultipartUpload(
-    { bucket, key, baseUrl, httpsAgent, signal }: MultipartUploadParams
-): Promise<string> {
+export async function createMultipartUpload({
+    bucket,
+    key,
+    baseUrl,
+    httpsAgent,
+    signal
+}: MultipartUploadParams): Promise<string> {
     const queryParams = { bucket, key };
-    const { data } = await axios.post(
-        createMpuUrl(baseUrl),
-        null,
-        {
-            params: queryParams,
-            responseType: 'text',
-            httpsAgent,
-            signal
-        },
-    );
+    const { data } = await axios.post(createMpuUrl(baseUrl), null, {
+        params: queryParams,
+        responseType: 'text',
+        httpsAgent,
+        signal
+    });
 
     const parsed = parser.parse(data);
     const r = parsed?.InitiateMultipartUploadResult;
@@ -114,7 +110,6 @@ export async function createMultipartUpload(
     }
     return r.UploadId as string;
 }
-
 
 export async function sendMultipartUpload(
     file: Blob,
@@ -129,7 +124,6 @@ export async function sendMultipartUpload(
         return result;
     }
 }
-
 
 /**
  * Abort an in-progress S3 multipart upload.
@@ -158,12 +152,7 @@ export async function abortMultipartUpload(
     uploadId: string,
     params: MultipartUploadParams
 ): Promise<void> {
-    const {
-        baseUrl,
-        bucket,
-        key,
-        httpsAgent,
-    } = params;
+    const { baseUrl, bucket, key, httpsAgent } = params;
 
     await axios.delete(abortMpuUrl(baseUrl), {
         params: {
@@ -171,19 +160,17 @@ export async function abortMultipartUpload(
             Key: key,
             UploadId: uploadId,
             httpsAgent,
-            timeout: 15_000,
-        },
+            timeout: 15_000
+        }
     });
 }
 
-
 /** Private functions ====================================================== */
-
 
 function splitMultipartUpload(
     file: Blob,
     { partSize = DEFAULT_PART_SIZE }: MultipartUploadParams
-): { partSize: number, numParts: number } {
+): { partSize: number; numParts: number } {
     const size = normalizePartSize(file, partSize);
     const numParts = getNumParts(file, size);
     if (!Number.isInteger(numParts) || numParts <= 0) {
@@ -192,12 +179,10 @@ function splitMultipartUpload(
     return { partSize: size, numParts };
 }
 
-
 interface PartUrl {
     partNumber: number;
     url: string;
-};
-
+}
 
 /**
  * Fetch presigned part URLs for an S3 multipart upload.
@@ -211,32 +196,23 @@ async function openMultipartUpload(
     numParts: number,
     params: MultipartUploadParams
 ): Promise<PartUrl[]> {
-    const {
-        baseUrl,
-        bucket,
-        key,
-        signal,
-        httpsAgent,
-    } = params;
+    const { baseUrl, bucket, key, signal, httpsAgent } = params;
 
     if (signal?.aborted) {
-        throw new CanceledError()
+        throw new CanceledError();
     }
 
-    const resp = await axios.get(
-        partUrlsUrl(baseUrl),
-        {
-            params: {
-                bucket,
-                key,
-                uploadId,
-                numParts,
-            },
-            responseType: 'json',
-            httpsAgent,
-            signal
-        }
-    );
+    const resp = await axios.get(partUrlsUrl(baseUrl), {
+        params: {
+            bucket,
+            key,
+            uploadId,
+            numParts
+        },
+        responseType: 'json',
+        httpsAgent,
+        signal
+    });
 
     const data = resp.data;
     if (!Array.isArray(data)) {
@@ -245,9 +221,8 @@ async function openMultipartUpload(
 
     // Normalize & validate items
     const items: PartUrl[] = data.map((item: any) => {
-        const partNumber = typeof item?.partNumber === 'string'
-            ? Number(item.partNumber)
-            : item?.partNumber;
+        const partNumber =
+            typeof item?.partNumber === 'string' ? Number(item.partNumber) : item?.partNumber;
 
         if (!Number.isInteger(partNumber) || partNumber <= 0 || typeof item?.url !== 'string') {
             throw new Error(`Invalid item in response: ${JSON.stringify(item)}`);
@@ -261,28 +236,23 @@ async function openMultipartUpload(
     return items;
 }
 
-
 interface UploadedPart {
     partNumber: number;
     eTag: string;
 }
 
-
 function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-
 function backoff(attempt: number) {
     const offset = Math.floor(Math.random() * 100);
-    return 300 * (2 ** (attempt - 1)) + offset;
+    return 300 * 2 ** (attempt - 1) + offset;
 }
-
 
 function shouldRetry(status: number) {
     return status >= 500 || status == 429 || status == 408;
 }
-
 
 async function doMultipartUpload(
     file: Blob,
@@ -290,12 +260,7 @@ async function doMultipartUpload(
     urls: PartUrl[],
     parameters: MultipartUploadParams
 ): Promise<UploadedPart[]> {
-    const {
-        httpsAgent,
-        signal,
-        onProgress,
-        numRetries = DEFAULT_NUM_RETRIES
-    } = parameters;
+    const { httpsAgent, signal, onProgress, numRetries = DEFAULT_NUM_RETRIES } = parameters;
 
     // sanity check: ensure ascending partNumber 1..N
     for (let i = 0; i < urls.length; i++) {
@@ -303,7 +268,7 @@ async function doMultipartUpload(
         if (urls[i].partNumber !== expectedPartNumber) {
             throw new Error(
                 `Urls not in ascending order or missing numbers; ` +
-                `found partNumber=${urls[i].partNumber}, expected ${expectedPartNumber}`
+                    `found partNumber=${urls[i].partNumber}, expected ${expectedPartNumber}`
             );
         }
     }
@@ -352,14 +317,17 @@ async function doMultipartUpload(
 
                 if (resp.status >= 200 && resp.status <= 300) {
                     const headers = resp.headers;
-                    if (headers && typeof headers === 'object' && 'etag' in headers && typeof (headers as any).etag === 'string') {
+                    if (
+                        headers &&
+                        typeof headers === 'object' &&
+                        'etag' in headers &&
+                        typeof (headers as any).etag === 'string'
+                    ) {
                         const eTag: string = headers.etag;
                         uploaded.push({ partNumber, eTag });
                         break;
                     } else {
-                        throw new Error(
-                            `Part ${partNumber}: missing etag in response headers `
-                        )
+                        throw new Error(`Part ${partNumber}: missing etag in response headers `);
                     }
                 }
 
@@ -368,15 +336,14 @@ async function doMultipartUpload(
                     continue;
                 }
 
-                const snippet = typeof resp.data === "string"
-                    ? resp.data.slice(0, 200)
-                    : JSON.stringify(resp.data ?? {}).slice(0, 200);
+                const snippet =
+                    typeof resp.data === 'string'
+                        ? resp.data.slice(0, 200)
+                        : JSON.stringify(resp.data ?? {}).slice(0, 200);
                 throw new Error(
                     `Part ${partNumber} upload failed: ${resp.status} ${resp.statusText} - ${snippet}`
                 );
-
             } catch (err: any) {
-
                 // Continue trying if we had a network drop
                 const isNetworkError = axios.isAxiosError(err) && !err.response;
                 if (isNetworkError && attempt <= numRetries) {
@@ -395,12 +362,10 @@ async function doMultipartUpload(
     return uploaded;
 }
 
-
 function ensureQuoted(tag: string): string {
     const t = tag.trim();
-    return (t.startsWith('"') && t.endsWith('"')) ? t : `"${t.replace(/^"+|"+$/g, '')}"`;
+    return t.startsWith('"') && t.endsWith('"') ? t : `"${t.replace(/^"+|"+$/g, '')}"`;
 }
-
 
 function getMultipartUploadXML(parts: UploadedPart[]): string {
     const ns = 'http://s3.amazonaws.com/doc/2006-03-01/';
@@ -410,41 +375,33 @@ function getMultipartUploadXML(parts: UploadedPart[]): string {
                 `<Part><PartNumber>${partNumber}</PartNumber><ETag>${ensureQuoted(eTag)}</ETag></Part>`
         )
         .join('');
-    return `<?xml version="1.0" encoding="UTF-8"?>` +
-        `<CompleteMultipartUpload xmlns="${ns}">${items}</CompleteMultipartUpload>`;
+    return (
+        `<?xml version="1.0" encoding="UTF-8"?>` +
+        `<CompleteMultipartUpload xmlns="${ns}">${items}</CompleteMultipartUpload>`
+    );
 }
-
 
 async function completeMultipartUpload(
     uploadId: string,
     parts: UploadedPart[],
     params: MultipartUploadParams
 ): Promise<MultipartUploadResult> {
-    const {
-        baseUrl,
-        bucket,
-        key,
-        httpsAgent,
-        signal,
-    } = params;
+    const { baseUrl, bucket, key, httpsAgent, signal } = params;
 
     if (parts.length === 0) throw new Error('completeMultipartUpload: no parts provided');
     const xml = getMultipartUploadXML(parts);
 
-    const resp = await axios.post(
-        completeMpuUrl(baseUrl),
-        xml,
-        {
-            params: { bucket, key, uploadId },
-            headers: { 'Content-Type': 'application/xml' },
-            responseType: 'text',
-            httpsAgent,
-            signal
-        }
-    );
+    const resp = await axios.post(completeMpuUrl(baseUrl), xml, {
+        params: { bucket, key, uploadId },
+        headers: { 'Content-Type': 'application/xml' },
+        responseType: 'text',
+        httpsAgent,
+        signal
+    });
 
     if (resp.status >= 400) {
-        const body = typeof resp.data === 'string' ? resp.data.slice(0, 400) : JSON.stringify(resp.data);
+        const body =
+            typeof resp.data === 'string' ? resp.data.slice(0, 400) : JSON.stringify(resp.data);
         throw new Error(`Complete MPU failed: ${resp.status} ${resp.statusText} – ${body}`);
     }
 
@@ -458,7 +415,6 @@ async function completeMultipartUpload(
         checksumType: CompleteMultipartUploadResult.ChecksumType
     };
 }
-
 
 /** S3 Multi-Part Upload size limits  */
 const S3_MIN_PART_SIZE = 5 * 1024 * 1024; // 5 MiB
@@ -476,7 +432,6 @@ function normalizePartSize(file: Blob, desired: number): number {
     return Math.max(desired, minByRule, minByCount);
 }
 
-
 /**
  * Compute how many parts are needed to cover the file.
  */
@@ -487,17 +442,20 @@ function getNumParts(file: Blob, size: number): number {
     return file.size === 0 ? 0 : Math.ceil(file.size / size);
 }
 
-
 function* iterateFileChunks(
     file: Blob,
     chunkSize: number
-): Generator<{
-    index: number;
-    start: number;
-    end: number;
-    isLast: boolean;
-    part: Blob;
-}, void, unknown> {
+): Generator<
+    {
+        index: number;
+        start: number;
+        end: number;
+        isLast: boolean;
+        part: Blob;
+    },
+    void,
+    unknown
+> {
     if (!Number.isFinite(chunkSize) || chunkSize <= 0) {
         throw new RangeError(`chunkSize must be a positive integer, got ${chunkSize}`);
     }

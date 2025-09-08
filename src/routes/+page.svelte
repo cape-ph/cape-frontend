@@ -20,9 +20,9 @@
 </script>
 
 {#if auth.user}
-    <Navbar {logo} user={auth.user} {links} {activeKey} {onSelect}  />
+    <Navbar {logo} user={auth.user} {links} {activeKey} {onSelect} />
     <main>
-        <div class="flex h-screen justify-center mt-8">
+        <div class="mt-8 flex h-screen justify-center">
             <div class="w-lg">
                 {#if activeKey === 'upload'}
                     <FileUpload

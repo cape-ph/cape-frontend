@@ -88,7 +88,7 @@
                     if (res !== undefined) {
                         toaster.success({
                             title: `Upload ${item.file.name} completed.`
-                        })
+                        });
                     }
                 } catch (err: any) {
                     if (err?.name === 'CanceledError') {
@@ -113,7 +113,6 @@
         if (item.bytesSent < item.totalBytes) {
             item.controller?.abort?.();
         }
-
 
         api?.deleteFile(item.file);
         if (items != undefined) {
@@ -141,11 +140,10 @@
 </script>
 
 <div class="mb-4 space-y-2">
-    <h2 class="text-2xl font-semibold text-primary-500">File Upload</h2>
+    <h2 class="text-primary-500 text-2xl font-semibold">File Upload</h2>
 </div>
 
 <div>
-
     <!-- File input -->
     <FileUpload
         name="file"
