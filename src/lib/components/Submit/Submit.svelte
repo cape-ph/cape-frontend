@@ -2,7 +2,12 @@
     import { toaster } from '$lib/toaster';
     import axios from 'axios';
     import { onMount } from 'svelte';
-    let { baseUrl } = $props<{ baseUrl: string }>();
+
+    let { baseUrl, bucketURI } = $props<{ baseUrl: string; bucketURI: string }>();
+
+    /**
+     * Types
+     */
 
     interface PipelineProfile {
         display_name: string;
@@ -17,13 +22,25 @@
     }
     type Options = Record<string, unknown>;
     type FieldSpec =
-        | { type: 'number'; label?: string; min?: number; max?: number; step?: number }
-        | { type: 'text'; label?: string; placeholder?: string }
-        | { type: 'boolean'; label?: string };
+        | {
+              type: 'number';
+              label?: string;
+              min?: number;
+              max?: number;
+              step?: number;
+              default?: number;
+          }
+        | { type: 'text'; label?: string; default?: string }
+        | { type: 'boolean'; label?: string; default?: boolean };
     type Schema = Record<string, FieldSpec>;
     type OptionsSchema = { schema: Schema; optionsFieldName: string };
 
-    // Form state
+    /**
+     * State
+     *
+     * State is reactive data which triggers Svelte to re-render the page.
+     */
+
     let pipelineChoices = $state<Record<string, string[]>>();
     let pipelineName = $state('');
     const pipelineVersionChoices = $derived(
@@ -31,9 +48,20 @@
     );
 
     let pipelineVersion = $state('');
-    let outputPath = $state('');
+    let outputPath = $state(bucketURI);
     const options = $state<Options>({});
+    let optionsInitialized = $state(false);
     const schema = $derived(getOptionSchema(pipelineName, pipelineVersion));
+
+    $effect(() => {
+        if (optionsInitialized && !schema) {
+            setOptions({});
+            optionsInitialized = false;
+        } else if (!optionsInitialized && schema) {
+            setOptions(getDefaultOptionsFromSchema(schema.schema));
+            optionsInitialized = true;
+        }
+    });
 
     // JSON editor state
     let jsonText = $state('');
@@ -50,15 +78,27 @@
         }
     });
 
+    /**
+     * Options.
+     *
+     * Options are a JSON object that store command line options that are used
+     * by the pipeline.  Since the options depend on the specific pipeline that
+     * is being run, these are configurable.
+     *
+     * A future API update will return something like and OptionSchema as part
+     * of the /dap/pipelines endpoint.  Until then, we will hard-code the schema
+     * here.
+     */
+
     // Hard-coded lookup table for now
     const SCHEMAS: Record<string, Record<string, OptionsSchema>> = {
         'bactopia/bactopia': {
             'v3.0.1': {
                 schema: {
-                    max_cpus: { type: 'number', label: 'max_cpus', min: 1, step: 1 },
-                    max_memory: { type: 'text', label: 'max_memory', placeholder: '24.GB' },
-                    ont: { type: 'text', label: 'ont', placeholder: 's3://.../reads.gz' },
-                    sample: { type: 'text', label: 'sample', placeholder: 'abcdefghij' }
+                    max_cpus: { type: 'number', label: 'max_cpus', min: 1, step: 1, default: 8 },
+                    max_memory: { type: 'text', label: 'max_memory', default: '24.GB' },
+                    ont: { type: 'text', label: 'ont' },
+                    sample: { type: 'text', label: 'sample' }
                 },
                 optionsFieldName: 'nextflowOptions'
             }
@@ -86,10 +126,29 @@
         }
     }
 
+    /**
+     * Construct an options object from the Schema's defaults
+     * @param s - the schema
+     */
+    function getDefaultOptionsFromSchema(s: Schema): Record<string, unknown> {
+        const out: Record<string, unknown> = {};
+        for (const [key, spec] of Object.entries(s)) {
+            // include only if a default is provided
+            if ('default' in spec && spec.default !== undefined) {
+                out[key] = spec.default as unknown;
+            }
+        }
+        return out;
+    }
+
     function setOption(key: string, value: unknown) {
         options[key] = value;
     }
 
+    /**
+     * Mutate the options state in place to contain new values
+     * @param next - the replacement values to use
+     */
     function setOptions(next: Record<string, unknown>) {
         for (const key of Object.keys(options)) {
             if (!(key in next)) delete options[key];
@@ -110,7 +169,10 @@
             .join(' ');
     }
 
-    // Get allowed pipelines / versions
+    /**
+     * Restructure the API output into an object with pipeline names as keys
+     *  and versions as values
+     */
     function getPipelineChoices(pipelines: Pipeline[]): Record<string, string[]> {
         const grouped = pipelines.reduce(
             (acc, p) => {
@@ -126,6 +188,9 @@
         return Object.fromEntries(Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)));
     }
 
+    /**
+     * Query the API for the registered pipelines
+     */
     async function getPipelines() {
         try {
             const url = `${baseUrl}/dap/pipelines`;
@@ -140,14 +205,15 @@
         }
     }
 
+    /** As soon as the component mounts, fetch the registered pipelines */
     onMount(getPipelines);
 
     // Json
 
     /**
-     * Convert form state into a JSON formatted string
+     * Convert form state into a JSON object
      */
-    function serialize(): string {
+    function serialize() {
         const fieldName = schema?.optionsFieldName;
         const optionsString = getOptionString(options);
         const obj: Record<string, unknown> = {
@@ -158,7 +224,7 @@
         if (fieldName) {
             obj[fieldName] = optionsString;
         }
-        return JSON.stringify(obj, null, 2);
+        return obj;
     }
 
     function safeCloneOptions(o: unknown): Record<string, unknown> {
@@ -194,17 +260,34 @@
     $effect(() => {
         if (updatingFromJSON) return;
         updatingFromForm = true;
-        jsonText = serialize();
+        jsonText = JSON.stringify(serialize(), null, 2);
         jsonError = null;
         updatingFromForm = false;
     });
+
+    async function onSubmit() {
+        if (jsonError) return;
+        try {
+            const url = `${baseUrl}/dap/submit`;
+            const data = serialize();
+            const result = await axios.post(url, data);
+            toaster.info({
+                title: `Job submitted`
+            });
+        } catch (err: any) {
+            const message = err instanceof Error ? err.message : String(err);
+            toaster.error({
+                title: `An error occurred while reading the pipelines: ${message}`
+            });
+        }
+    }
 </script>
 
 <div class="space-y-6">
     <!-- A. Pipeline -->
     <section class="space-y-3">
         <h2 class="text-lg font-semibold">Pipeline</h2>
-        <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div class="grid grid-cols-1 gap-3">
             <label class="flex flex-col gap-1">
                 <span class="text-xs opacity-70">pipelineName</span>
                 <select
@@ -245,28 +328,25 @@
 
             <label class="flex flex-col gap-1">
                 <span class="text-xs opacity-70">outputPath</span>
-                <input
-                    class="input input-bordered"
-                    type="text"
-                    bind:value={outputPath}
-                    placeholder="s3://bucket/pipeline-output"
-                />
+                <input class="input input-bordered" type="text" bind:value={outputPath} />
             </label>
         </div>
     </section>
 
-    <!-- B. Options -->
-    <section class="space-y-3">
-        <div class="flex items-center gap-2">
-            <h2 class="text-lg font-semibold">Options</h2>
-            {#if !schema}
-                <span class="text-xs opacity-60">Fill pipeline name & version to configure</span>
-            {/if}
-        </div>
+    {#if schema}
+        <!-- B. Options -->
+        <section class="space-y-3">
+            <div class="flex items-center gap-2">
+                <h2 class="text-lg font-semibold">Flags</h2>
+                {#if !schema}
+                    <span class="text-xs opacity-60">Fill pipeline name & version to configure</span
+                    >
+                {/if}
+            </div>
 
-        <!-- Schema-driven fields -->
-        {#if schema}
-            <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <!-- Schema-driven fields -->
+
+            <div class="grid grid-cols-1 gap-3">
                 {#each Object.entries(schema.schema) as [k, spec] (k)}
                     <label class="flex flex-col gap-1">
                         <span class="text-xs opacity-70">{spec.label ?? k}</span>
@@ -286,7 +366,6 @@
                                     const v = (e.target as HTMLInputElement).value;
                                     setOption(k, v === '' ? '' : Number(v));
                                 }}
-                                placeholder="e.g. 8"
                             />
                         {:else if spec.type === 'boolean'}
                             <input
@@ -303,20 +382,18 @@
                                 type="text"
                                 value={asString(options[k])}
                                 oninput={(e) => setOption(k, (e.target as HTMLInputElement).value)}
-                                placeholder={spec.placeholder ?? ''}
                             />
                         {/if}
                     </label>
                 {/each}
             </div>
-        {/if}
-    </section>
+        </section>
+    {/if}
 
     <!-- JSON editor -->
     <section class="space-y-2">
         <div class="flex items-center justify-between">
             <h2 class="text-lg font-semibold">JSON</h2>
-            {#if jsonError}<span class="text-error-600 text-xs">Parse error: {jsonError}</span>{/if}
         </div>
         <textarea
             class="textarea textarea-bordered min-h-[220px] w-full font-mono text-sm leading-5"
@@ -324,5 +401,20 @@
             oninput={(e) => onJsonInput((e.target as HTMLTextAreaElement).value)}
             >{jsonText}</textarea
         >
+        {#if jsonError}
+            <div>
+                <span class="text-error-600 text-xs">Parse error: {jsonError}</span>
+            </div>
+        {/if}
     </section>
+
+    <div class="mt-2">
+        <button
+            type="submit"
+            class="btn preset-filled-primary-500 w-full rounded-lg shadow-lg"
+            onclick={onSubmit}
+        >
+            Submit
+        </button>
+    </div>
 </div>

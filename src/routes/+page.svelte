@@ -3,10 +3,6 @@
     import Submit from '$lib/components/Submit/Submit.svelte';
     import LoggingIn from '$lib/components/LoggingIn/LoggingIn.svelte';
     import { auth } from '$lib/user.svelte';
-
-    $effect(() => {
-        console.log('user changed ->', auth.user?.profile?.email);
-    });
 </script>
 
 {#if auth.user}
@@ -16,7 +12,8 @@
                 baseUrl="https://api.cape-dev.org/capi-dev"
                 bucket="ccd-dlh-t-seqauto-input-raw-vbkt-s3-b8fded5"
             /> -->
-            <Submit baseUrl="https://api.cape-dev.org/capi-dev"/>
+            <Submit baseUrl="https://api.cape-dev.org/capi-dev"
+                bucketURI='s3://ccd-dlh-t-seqauto-result-raw-vbkt-s3-1e80821/pipeline-output'/>
         </div>
     </div>
 {:else}
