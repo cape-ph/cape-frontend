@@ -85,6 +85,11 @@
                     });
 
                     item.result = res;
+                    if (res !== undefined) {
+                        toaster.success({
+                            title: `Upload ${item.file.name} completed.`
+                        })
+                    }
                 } catch (err: any) {
                     if (err?.name === 'CanceledError') {
                         toaster.info({
@@ -105,13 +110,19 @@
     }
 
     function handleCancelUpload(item: UploadItem) {
-        item.controller?.abort?.();
+        if (item.bytesSent < item.totalBytes) {
+            item.controller?.abort?.();
+        }
+
+
         api?.deleteFile(item.file);
         if (items != undefined) {
             items = items.filter((x) => x.id !== item.id);
-            toaster.info({
-                title: `Upload ${item.file.name} canceled.`
-            });
+            if (item.bytesSent < item.totalBytes) {
+                toaster.info({
+                    title: `Upload ${item.file.name} canceled.`
+                });
+            }
         }
     }
 
@@ -129,10 +140,11 @@
         it.totalBytes ? Math.min(100, Math.floor((it.bytesSent / it.totalBytes) * 100)) : 0;
 </script>
 
-<div class="card bg-surface-100-900 p-5 shadow">
-    <div class="mb-4 space-y-2">
-        <h2 class="h2 text-primary-500 dark:text-primary-200">File Upload</h2>
-    </div>
+<div class="mb-4 space-y-2">
+    <h2 class="text-2xl font-semibold text-primary-500">File Upload</h2>
+</div>
+
+<div>
 
     <!-- File input -->
     <FileUpload

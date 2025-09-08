@@ -26,6 +26,8 @@
     });
 </script>
 
-{@render children()}
+<div data-theme="cape">
+    {@render children()}
+</div>
 
 <Toaster {toaster} />
