@@ -101,6 +101,15 @@
                     sample: { type: 'text', label: 'sample' }
                 },
                 optionsFieldName: 'nextflowOptions'
+            },
+            'v3.2.0': {
+                schema: {
+                    max_cpus: { type: 'number', label: 'max_cpus', min: 1, step: 1, default: 8 },
+                    max_memory: { type: 'text', label: 'max_memory', default: '24.GB' },
+                    ont: { type: 'text', label: 'ont' },
+                    sample: { type: 'text', label: 'sample' }
+                },
+                optionsFieldName: 'nextflowOptions'
             }
         }
         // Add more pipelines/versions here as needed
@@ -184,6 +193,11 @@
             },
             {} as Record<string, string[]>
         );
+
+        // TODO: bactopia/bactopia@3.2.0 is installed but not registered in the api
+        if (!grouped['bactopia/bactopia'].includes('v3.2.0')) {
+            grouped['bactopia/bactopia'].push('v3.2.0')
+        }
 
         return Object.fromEntries(Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)));
     }
