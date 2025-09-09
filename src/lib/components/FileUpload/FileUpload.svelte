@@ -60,7 +60,7 @@
      * @param file - the file to check
      */
     function validateFile(file: File) {
-        if (!file.name.endsWith('.fastq.gz')) {
+        if (!(file.name.endsWith('.fastq.gz') || file.name.endsWith('.fastq'))) {
             return ['NOT_A_FASTQ_GZ_FILE'];
         }
         return null;
@@ -73,7 +73,7 @@
         for (const rejection of files) {
             if (rejection.errors.includes('NOT_A_FASTQ_GZ_FILE')) {
                 toaster.error({
-                    title: `${rejection.file.name} is not a *.fastq.gz file`
+                    title: `${rejection.file.name} is not a *.fastq or *.fastq.gz file`
                 });
             }
         }
@@ -227,7 +227,7 @@
             {onFileReject}
             interfaceBg="bg-surface-150-950"
             filesListBase={fileListCss}
-            subtext="Attach *.fastq.gz files"
+            subtext="Attach *fastq or *.fastq.gz files"
         >
             {#snippet iconInterface()}
                 <ImagePlus class="size-8" />
