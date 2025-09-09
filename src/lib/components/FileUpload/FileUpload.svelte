@@ -20,20 +20,40 @@
     let sampleId = $state('');
     let sampleType = $state('');
     let sampleMatrix = $state('');
+    let sampleCollectionLocation = $state('');
     let sampleCollectionDate = $state<Date>(new Date());
     const components = $derived(api?.acceptedFiles ?? []);
     const filename = $derived(sampleId ? `sample-${sampleId}.tar` : '');
     const fileListCss = $derived(
-        api?.acceptedFiles && api.acceptedFiles.length > 0 ?
-        "mt-2 max-h-35 overflow-y-auto space-y-1 border border-surface-200-800 rounded-container no-scrollbar" :
-        "hidden"
+        api?.acceptedFiles && api.acceptedFiles.length > 0
+            ? 'mt-2 max-h-35 overflow-y-auto space-y-1 border border-surface-200-800 rounded-container no-scrollbar'
+            : 'hidden'
     );
-    const buttonCss = "btn preset-filled-primary-500 w-full rounded-lg shadow-lg";
-    const buttonDoneCss = "btn w-full rounded-lg shadow-lg";
+    const buttonCss = 'btn preset-filled-primary-500 w-full rounded-lg shadow-lg';
+    const buttonDoneCss = 'btn w-full rounded-lg shadow-lg';
 
     // Date formatting
-    const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
-    const parseDate = (s: string) => (s ? new Date(s + 'T00:00:00') : undefined);
+    // const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
+    // const parseDate = (s: string) => (s ? new Date(s + 'T00:00:00') : undefined);
+    function fmtDate(d: Date): string {
+        // base parts
+        const year = d.getUTCFullYear();
+        const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(d.getUTCDate()).padStart(2, '0');
+        const hour = String(d.getUTCHours()).padStart(2, '0');
+        const min = String(d.getUTCMinutes()).padStart(2, '0');
+        const sec = String(d.getUTCSeconds()).padStart(2, '0');
+
+        // milliseconds (pad to 3 digits)
+        const ms = String(d.getUTCMilliseconds()).padStart(3, '0');
+
+        // Format like 2025-08-15T14:36:28.024+00:00
+        return `${year}-${month}-${day}T${hour}:${min}:${sec}.${ms}+00:00`;
+    }
+
+    function parseDate(s: string): Date | undefined {
+        return s ? new Date(s) : undefined;
+    }
 
     /**
      * Check that the file is a .fastq.gz file
@@ -71,11 +91,12 @@
         }
 
         // Pre-compute the size of the final tar file
-        upload.state = "uploading";
+        upload.state = 'uploading';
         const meta = {
             sampleId,
             sampleType,
             sampleMatrix,
+            sampleCollectionLocation,
             sampleCollectionDate: fmtDate(sampleCollectionDate)
         };
         const size = tarSize(meta, components);
@@ -105,7 +126,7 @@
                 onProgress: onProgress
             });
             if (res !== undefined) {
-                upload.state = "complete";
+                upload.state = 'complete';
                 toaster.success({
                     title: `Upload ${filename} completed.`
                 });
@@ -133,7 +154,6 @@
         }
         upload.state = 'pending';
     }
-
 </script>
 
 <div class="mb-4 space-y-2">
@@ -169,6 +189,15 @@
                     type="text"
                     bind:value={sampleMatrix}
                     aria-label="Sample Matrix"
+                />
+            </label>
+            <label class="flex flex-col gap-1">
+                <span class="text-xs opacity-70">sampleCollectionLocation</span>
+                <input
+                    class="input input-bordered"
+                    type="text"
+                    bind:value={sampleCollectionLocation}
+                    aria-label="Sample Collection Location"
                 />
             </label>
             <label class="flex flex-col gap-1">
