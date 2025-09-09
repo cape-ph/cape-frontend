@@ -8,3 +8,16 @@
 /* Register custom themes */
 @import '@skeletonlabs/skeleton/themes/cerberus';
 @import './themes/cape.css';
+
+
+/* Hide scrollbar but keep scrolling */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.no-scrollbar {
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
+}

@@ -5,7 +5,7 @@
     import { tarSize, tarPack, chunkStream } from '$lib/stream';
     import FileUploadProgress from './FileUploadProgress.svelte';
     import type { OnProgress } from '$lib/mpu';
-    import { itemProps, type Api } from '@zag-js/file-upload';
+    import type { Api } from '@zag-js/file-upload';
     import type { Upload, RejectFile } from './types';
 
     import ImagePlus from '@lucide/svelte/icons/image-plus';
@@ -22,7 +22,14 @@
     let sampleMatrix = $state('');
     let sampleCollectionDate = $state<Date>(new Date());
     const components = $derived(api?.acceptedFiles ?? []);
-    const filename = $derived(`sample-${sampleId}.tar`);
+    const filename = $derived(sampleId ? `sample-${sampleId}.tar` : '');
+    const fileListCss = $derived(
+        api?.acceptedFiles && api.acceptedFiles.length > 0 ?
+        "mt-2 max-h-35 overflow-y-auto space-y-1 border border-surface-200-800 rounded-container no-scrollbar" :
+        "hidden"
+    );
+    const buttonCss = "btn preset-filled-primary-500 w-full rounded-lg shadow-lg";
+    const buttonDoneCss = "btn w-full rounded-lg shadow-lg";
 
     // Date formatting
     const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
@@ -64,7 +71,7 @@
         }
 
         // Pre-compute the size of the final tar file
-        upload.state = 'building';
+        upload.state = "uploading";
         const meta = {
             sampleId,
             sampleType,
@@ -90,7 +97,6 @@
         };
 
         try {
-            upload.state = "uploading";
             const res = await multiPartUpload(stream, size, {
                 baseUrl: baseUrl,
                 bucket: bucket,
@@ -121,13 +127,11 @@
         }
     }
 
-    function onCancel(upload: Upload) {
+    function onCancel() {
         if (upload.bytesSent < upload.totalBytes) {
             upload.controller?.abort?.();
-            toaster.info({
-                title: `Upload of ${filename} canceled.`
-            })
         }
+        upload.state = 'pending';
     }
 
 </script>
@@ -193,15 +197,21 @@
             onApiReady={(x) => (api = x)}
             {onFileReject}
             interfaceBg="bg-surface-150-950"
-            filesListBase="mt-2 max-h-40 overflow-y-auto space-y-1"
+            filesListBase={fileListCss}
             subtext="Attach *.fastq.gz files"
         >
             {#snippet iconInterface()}
                 <ImagePlus class="size-8" />
             {/snippet}
         </FileUpload>
-    </section>
+        <FileUploadProgress {filename} {upload} />
 
-    <FileUploadProgress {filename} {upload} {onCancel} />
-    <button class="btn preset-filled-primary-500 mt-2" onclick={onUpload}> Upload </button>
+        {#if upload.state === 'pending'}
+            <button class={buttonCss} onclick={onUpload}>Upload</button>
+        {:else if upload.state === 'uploading'}
+            <button class={buttonCss} onclick={onCancel}>Cancel</button>
+        {:else if upload.state === 'complete'}
+            <button class={buttonDoneCss}>Upload complete</button>
+        {/if}
+    </section>
 </div>

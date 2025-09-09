@@ -5,7 +5,7 @@ export interface Upload {
     // key: string;
 
     /** The state of the upload */
-    state: 'pending' | 'building' | 'uploading' | 'complete';
+    state: 'pending' | 'uploading' | 'complete';
 
     /** The number of bytes sent */
     bytesSent: number;
