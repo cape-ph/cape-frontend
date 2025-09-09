@@ -20,7 +20,9 @@
     let avatarUrl: string | null = $state(null);
 </script>
 
-<nav class="border-surface-200-800 bg-gradient-to-b from-surface-200-800 to-surface-100-900 w-full border-b">
+<nav
+    class="border-surface-200-800 from-surface-200-800 to-surface-100-900 w-full border-b bg-gradient-to-b"
+>
     <div class="container mx-auto flex h-14 items-center justify-between px-4">
         <!-- Brand -->
         <a href="/" class="flex items-center gap-2">
@@ -28,7 +30,7 @@
         </a>
 
         <!-- Menu -->
-        <Menu {links} {activeKey} {onSelect}/>
+        <Menu {links} {activeKey} {onSelect} />
 
         <!-- User section -->
         <div class="flex items-center gap-4">

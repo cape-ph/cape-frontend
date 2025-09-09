@@ -4,7 +4,7 @@
         links,
         activeKey,
         onSelect,
-        buttonClass = "text-primary-700 rounded-base hover:preset-tonal"
+        buttonClass = 'text-primary-700 rounded-base hover:preset-tonal'
     }: {
         links: { key: string; label: string }[];
         activeKey: string;

@@ -11,7 +11,7 @@
     let { children } = $props();
 
     onMount(async () => {
-        if (!userManager) return;   // SSR guard
+        if (!userManager) return; // SSR guard
         const path = window.location.pathname;
         if (path.startsWith('/auth/')) return;
 
