@@ -82,7 +82,7 @@ export function tarPack(meta: SampleMeta, files: File[]): tar.Pack {
 
     for (const file of files) {
         const header = {
-            name: `samples/${file.name}`,
+            name: `sequencing/${file.name}`,
             size: file.size,
             mode: 0o644,
         }
