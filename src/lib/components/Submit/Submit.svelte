@@ -1,292 +1,249 @@
 <script lang="ts">
     import { toaster } from '$lib/toaster';
+    import { getPipelines, getPipelineProfile } from '$lib/pipeline';
+    import type { Pipeline, PipelineProfile } from '$lib/pipeline';
     import axios from 'axios';
     import { onMount } from 'svelte';
 
     let { baseUrl, bucketURI } = $props<{ baseUrl: string; bucketURI: string }>();
 
-    /**
-     * Types
-     */
+    type SchemaProperty = {
+        type?: 'string' | 'integer' | 'number' | 'boolean';
+        title?: string;
+        description?: string;
+        default?: unknown;
+        const?: unknown;
+        enum?: unknown[];
+        minimum?: number;
+        maximum?: number;
+        min?: number;
+        max?: number;
+        step?: number;
+    };
 
-    interface PipelineProfile {
-        display_name: string;
+    type ParameterField = {
         key: string;
-    }
-    interface Pipeline {
-        display_name: string;
-        pipeline_name: string;
-        pipeline_type: string;
-        version: string;
-        profiles: PipelineProfile[];
-    }
-    type Options = Record<string, unknown>;
-    type FieldSpec =
-        | {
-              type: 'number';
-              label?: string;
-              min?: number;
-              max?: number;
-              step?: number;
-              default?: number;
-          }
-        | { type: 'text'; label?: string; default?: string }
-        | { type: 'boolean'; label?: string; default?: boolean };
-    type Schema = Record<string, FieldSpec>;
-    type OptionsSchema = { schema: Schema; optionsFieldName: string };
+        label: string;
+        schema: SchemaProperty;
+        required: boolean;
+        readonly: boolean;
+    };
 
-    /**
-     * State
-     *
-     * State is reactive data which triggers Svelte to re-render the page.
-     */
+    let pipelines = $state<Pipeline[]>();
+    let profile = $state<PipelineProfile>();
+    let selectedProfileKey = $state('');
 
-    let pipelineChoices = $state<Record<string, string[]>>();
     let pipelineName = $state('');
+    let pipelineVersion = $state('');
+    let outputPath = $state('');
+    let outputPathInitialized = $state(false);
+    const options = $state<Record<string, unknown>>({});
+
+    async function updatePipelines() {
+        try {
+            pipelines = await getPipelines(baseUrl);
+        } catch (err) {
+            pipelines = undefined;
+            const message = err instanceof Error ? err.message : String(err);
+            toaster.error({
+                title: `An error occurred while reading the pipelines: ${message}`
+            });
+        }
+    }
+
+    onMount(updatePipelines);
+
+    function groupPipelines(pipelines: Pipeline[]): Record<string, Record<string, Pipeline>> {
+        return pipelines.reduce(
+            (acc, p) => {
+                const name = p.pipeline_name;
+                const version = p.version;
+                if (!acc[name]) {
+                    acc[name] = {};
+                }
+                acc[name][version] = p;
+                return acc;
+            },
+            {} as Record<string, Record<string, Pipeline>>
+        );
+    }
+
+    const pipelineChoices = $derived(pipelines ? groupPipelines(pipelines) : {});
     const pipelineVersionChoices = $derived(
-        pipelineName && pipelineChoices ? (pipelineChoices[pipelineName] ?? []) : []
+        pipelineName && pipelineChoices ? Object.keys(pipelineChoices[pipelineName] ?? {}) : []
+    );
+    const pipeline = $derived(
+        pipelineName && pipelineVersion ? pipelineChoices[pipelineName]?.[pipelineVersion] : undefined
+    );
+    const schema = $derived(profile?.parametersSchema);
+    const parameterFields = $derived(getParameterFields(schema));
+    const submitDisabled = $derived(!profile || profile.pipelineRunnable === false);
+    const submitDisabledReason = $derived(
+        profile?.pipelineRunnable === false
+            ? 'This pipeline is disabled and cannot be submitted.'
+            : 'Select a pipeline and version before submitting.'
     );
 
-    let pipelineVersion = $state('');
-    let outputPath = $state(bucketURI);
-    const options = $state<Options>({});
-    let optionsInitialized = $state(false);
-    const schema = $derived(getOptionSchema(pipelineName, pipelineVersion));
-
     $effect(() => {
-        if (optionsInitialized && !schema) {
-            setOptions({});
-            optionsInitialized = false;
-        } else if (!optionsInitialized && schema) {
-            setOptions(getDefaultOptionsFromSchema(schema.schema));
-            optionsInitialized = true;
+        if (!outputPathInitialized) {
+            outputPath = bucketURI;
+            outputPathInitialized = true;
         }
     });
 
-    // JSON editor state
-    let jsonText = $state('');
-    let jsonError = $state<string | null>(null);
-
-    // Loop guards to avoid feedback bounce
-    let updatingFromForm = false;
-    let updatingFromJSON = false;
-
-    // if pipelineName changes and current version is invalid, clear it
     $effect(() => {
         if (!pipelineVersionChoices.includes(pipelineVersion)) {
             pipelineVersion = '';
         }
     });
 
-    /**
-     * Options.
-     *
-     * Options are a JSON object that store command line options that are used
-     * by the pipeline.  Since the options depend on the specific pipeline that
-     * is being run, these are configurable.
-     *
-     * A future API update will return something like and OptionSchema as part
-     * of the /dap/pipelines endpoint.  Until then, we will hard-code the schema
-     * here.
-     */
+    $effect(() => {
+        updateProfile(pipeline);
+    });
 
-    // Hard-coded lookup table for now
-    const SCHEMAS: Record<string, Record<string, OptionsSchema>> = {
-        'bactopia/bactopia': {
-            'v3.0.1': {
-                schema: {
-                    max_cpus: { type: 'number', label: 'max_cpus', min: 1, step: 1, default: 8 },
-                    max_memory: { type: 'text', label: 'max_memory', default: '24.GB' },
-                    ont: { type: 'text', label: 'ont' },
-                    sample: { type: 'text', label: 'sample' }
-                },
-                optionsFieldName: 'nextflowOptions'
-            },
-            'v3.2.0': {
-                schema: {
-                    max_cpus: { type: 'number', label: 'max_cpus', min: 1, step: 1, default: 8 },
-                    max_memory: { type: 'text', label: 'max_memory', default: '24.GB' },
-                    ont: { type: 'text', label: 'ont' },
-                    sample: { type: 'text', label: 'sample' }
-                },
-                optionsFieldName: 'nextflowOptions'
-            }
+    async function updateProfile(pipeline: Pipeline | undefined) {
+        if (!pipeline) {
+            profile = undefined;
+            selectedProfileKey = '';
+            setOptions({});
+            return;
         }
-        // Add more pipelines/versions here as needed
-    };
 
-    /**
-     * Get the options schema
-     *
-     * TODO: replace this hard-coded look-up table with an API call
-     *
-     * @param pipelineName - the pipeline name
-     * @param pipelineVersion - the pipeline version
-     */
-    function getOptionSchema(
-        pipelineName: string,
-        pipelineVersion: string
-    ): OptionsSchema | undefined {
-        const p = SCHEMAS[pipelineName];
-        if (p) {
-            return p[pipelineVersion];
-        } else {
-            return undefined;
+        try {
+            const newProfile = await getPipelineProfile(baseUrl, pipeline);
+            profile = newProfile;
+            initializeOptions(newProfile);
+        } catch (err) {
+            profile = undefined;
+            selectedProfileKey = '';
+            setOptions({});
+            const message = err instanceof Error ? err.message : String(err);
+            toaster.error({
+                title: `An error occurred while reading the pipeline profile: ${message}`
+            });
         }
     }
 
-    /**
-     * Construct an options object from the Schema's defaults
-     * @param s - the schema
-     */
-    function getDefaultOptionsFromSchema(s: Schema): Record<string, unknown> {
-        const out: Record<string, unknown> = {};
-        for (const [key, spec] of Object.entries(s)) {
-            // include only if a default is provided
-            if ('default' in spec && spec.default !== undefined) {
-                out[key] = spec.default as unknown;
+    function initializeOptions(profile: PipelineProfile) {
+        const nextProfileKey = `${profile.pipelineName}:${profile.version}:${profile.pipelineId ?? ''}`;
+        if (nextProfileKey === selectedProfileKey) {
+            return;
+        }
+
+        selectedProfileKey = nextProfileKey;
+        setOptions(getDefaultOptions(profile.parametersSchema));
+    }
+
+    function getParameterFields(schema: unknown): ParameterField[] {
+        if (!schema || typeof schema !== 'object') {
+            return [];
+        }
+
+        const s = schema as {
+            properties?: Record<string, SchemaProperty>;
+            required?: string[];
+        };
+
+        return Object.entries(s.properties ?? {}).map(([key, propertySchema]) => ({
+            key,
+            label: getFieldLabel(key, propertySchema),
+            schema: propertySchema,
+            required: s.required?.includes(key) ?? false,
+            readonly: 'const' in propertySchema
+        }));
+    }
+
+    function getFieldLabel(key: string, propertySchema: SchemaProperty): string {
+        return propertySchema.title ?? key.replace(/^-+/, '');
+    }
+
+    function getDefaultOptions(schema: unknown): Record<string, unknown> {
+        const defaults: Record<string, unknown> = {};
+
+        for (const field of getParameterFields(schema)) {
+            if ('default' in field.schema) {
+                defaults[field.key] = field.schema.default;
+            } else if ('const' in field.schema) {
+                defaults[field.key] = field.schema.const;
+            } else if (field.schema.type === 'boolean') {
+                defaults[field.key] = false;
+            } else {
+                defaults[field.key] = '';
             }
         }
-        return out;
+
+        return defaults;
+    }
+
+    function setOptions(next: Record<string, unknown>) {
+        for (const key of Object.keys(options)) {
+            if (!(key in next)) {
+                delete options[key];
+            }
+        }
+
+        for (const [key, value] of Object.entries(next)) {
+            options[key] = value;
+        }
     }
 
     function setOption(key: string, value: unknown) {
         options[key] = value;
     }
 
-    /**
-     * Mutate the options state in place to contain new values
-     * @param next - the replacement values to use
-     */
-    function setOptions(next: Record<string, unknown>) {
-        for (const key of Object.keys(options)) {
-            if (!(key in next)) delete options[key];
-        }
-        for (const [k, v] of Object.entries(next)) {
-            options[k] = v;
-        }
+    function asString(value: unknown): string {
+        return typeof value === 'string' ? value : value == null ? '' : String(value);
     }
 
-    function asString(v: unknown) {
-        return typeof v === 'string' ? v : v == null ? '' : String(v);
+    function asNumberInputValue(value: unknown): string | number {
+        return typeof value === 'number' || typeof value === 'string' ? value : '';
     }
 
-    function getOptionString(options: Record<string, unknown>): string {
+    function getMin(schema: SchemaProperty): number | undefined {
+        return schema.minimum ?? schema.min;
+    }
+
+    function getMax(schema: SchemaProperty): number | undefined {
+        return schema.maximum ?? schema.max;
+    }
+
+    function getCliOptionsString(options: Record<string, unknown>): string {
         return Object.entries(options)
-            .filter(([_, v]) => v !== undefined && v !== null && v !== '')
-            .map(([k, v]) => `--${k} ${v}`)
+            .filter(([, value]) => value !== undefined && value !== null && value !== '')
+            .map(([key, value]) => `${key} ${String(value)}`)
             .join(' ');
     }
 
-    /**
-     * Restructure the API output into an object with pipeline names as keys
-     *  and versions as values
-     */
-    function getPipelineChoices(pipelines: Pipeline[]): Record<string, string[]> {
-        const grouped = pipelines.reduce(
-            (acc, p) => {
-                if (!acc[p.pipeline_name]) {
-                    acc[p.pipeline_name] = [];
-                }
-                acc[p.pipeline_name].push(p.version);
-                return acc;
-            },
-            {} as Record<string, string[]>
-        );
-
-        return Object.fromEntries(Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)));
-    }
-
-    /**
-     * Query the API for the registered pipelines
-     */
-    async function getPipelines() {
-        try {
-            const url = `${baseUrl}/dap/pipelines`;
-            const response = await axios.get(url);
-            const pipelines: Pipeline[] = response.data;
-            pipelineChoices = getPipelineChoices(pipelines);
-        } catch (err: any) {
-            const message = err instanceof Error ? err.message : String(err);
-            toaster.error({
-                title: `An error occurred while reading the pipelines: ${message}`
-            });
-        }
-    }
-
-    /** As soon as the component mounts, fetch the registered pipelines */
-    onMount(getPipelines);
-
-    // Json
-
-    /**
-     * Convert form state into a JSON object
-     */
-    function serialize() {
-        const fieldName = schema?.optionsFieldName;
-        const optionsString = getOptionString(options);
-        const obj: Record<string, unknown> = {
+    function serialize(): Record<string, unknown> {
+        const data: Record<string, unknown> = {
             pipelineName,
             pipelineVersion,
             outputPath
         };
-        if (fieldName) {
-            obj[fieldName] = optionsString;
+
+        if (profile?.submission.encoding === 'cli-string') {
+            data[profile.submission.optionsFieldName] = getCliOptionsString(options);
+        } else if (profile?.submission.optionsFieldName) {
+            data[profile.submission.optionsFieldName] = { ...options };
         }
-        return obj;
+
+        return data;
     }
-
-    function safeCloneOptions(o: unknown): Record<string, unknown> {
-        if (!o || typeof o !== 'object' || Array.isArray(o)) return {};
-        // shallow clone to a plain record
-        return { ...(o as Record<string, unknown>) };
-    }
-
-    function onJsonInput(txt: string) {
-        jsonText = txt;
-        if (updatingFromForm) return;
-
-        try {
-            updatingFromJSON = true;
-            const obj = JSON.parse(txt);
-
-            if (typeof obj.pipelineName === 'string') pipelineName = obj.pipelineName;
-            if (typeof obj.pipelineVersion === 'string') pipelineVersion = obj.pipelineVersion;
-            if (typeof obj.outputPath === 'string') outputPath = obj.outputPath;
-
-            if ('options' in obj) {
-                setOptions(safeCloneOptions(obj.options));
-            }
-
-            jsonError = null;
-        } catch (e: any) {
-            jsonError = e?.message ?? 'Invalid JSON';
-        } finally {
-            updatingFromJSON = false;
-        }
-    }
-
-    $effect(() => {
-        if (updatingFromJSON) return;
-        updatingFromForm = true;
-        jsonText = JSON.stringify(serialize(), null, 2);
-        jsonError = null;
-        updatingFromForm = false;
-    });
 
     async function onSubmit() {
-        if (jsonError) return;
+        if (submitDisabled) {
+            return;
+        }
+
         try {
-            const url = `${baseUrl}/dap/submit`;
-            const data = serialize();
-            const result = await axios.post(url, data);
+            await axios.post(`${baseUrl}/dap/submit`, serialize());
             toaster.info({
-                title: `Job submitted`
+                title: 'Job submitted'
             });
-        } catch (err: any) {
+        } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             toaster.error({
-                title: `An error occurred while reading the pipelines: ${message}`
+                title: `An error occurred while submitting the pipeline: ${message}`
             });
         }
     }
@@ -297,7 +254,6 @@
 </div>
 
 <div class="space-y-6">
-    <!-- A. Pipeline -->
     <section class="space-y-3">
         <h2 class="text-lg font-semibold">Pipeline</h2>
         <div class="grid grid-cols-1 gap-3">
@@ -308,14 +264,12 @@
                     bind:value={pipelineName}
                     aria-label="Select pipeline"
                 >
-                    <option value="" disabled selected={pipelineName === ''}
-                        >Select a pipeline…</option
-                    >
-                    {#if pipelineChoices}
-                        {#each Object.keys(pipelineChoices) as name (name)}
-                            <option value={name}>{name}</option>
-                        {/each}
-                    {/if}
+                    <option value="" disabled selected={pipelineName === ''}>
+                        Select a pipeline...
+                    </option>
+                    {#each Object.keys(pipelineChoices) as name (name)}
+                        <option value={name}>{name}</option>
+                    {/each}
                 </select>
             </label>
 
@@ -328,14 +282,12 @@
                     aria-label="Select version"
                 >
                     <option value="" disabled selected={pipelineVersion === ''}>
-                        {pipelineName ? 'Select a version…' : 'Select a pipeline first'}
+                        {pipelineName ? 'Select a version...' : 'Select a pipeline first'}
                     </option>
 
-                    {#if pipelineVersionChoices.length > 0}
-                        {#each pipelineVersionChoices as v (v)}
-                            <option value={v}>{v}</option>
-                        {/each}
-                    {/if}
+                    {#each pipelineVersionChoices as version (version)}
+                        <option value={version}>{version}</option>
+                    {/each}
                 </select>
             </label>
 
@@ -346,88 +298,106 @@
         </div>
     </section>
 
-    {#if schema}
-        <!-- B. Options -->
+    {#if profile}
         <section class="space-y-3">
-            <div class="flex items-center gap-2">
-                <h2 class="text-lg font-semibold">Flags</h2>
-                {#if !schema}
-                    <span class="text-xs opacity-60">Fill pipeline name & version to configure</span
-                    >
+            <div>
+                <h2 class="text-lg font-semibold">Parameters</h2>
+                {#if profile.pipelineDescription}
+                    <p class="text-sm opacity-70">{profile.pipelineDescription}</p>
                 {/if}
             </div>
 
-            <!-- Schema-driven fields -->
+            {#if parameterFields.length > 0}
+                <div class="grid grid-cols-1 gap-3">
+                    {#each parameterFields as field (field.key)}
+                        <label class="flex flex-col gap-1">
+                            <span class="text-xs opacity-70">
+                                {field.label}{field.required ? ' *' : ''}
+                            </span>
 
-            <div class="grid grid-cols-1 gap-3">
-                {#each Object.entries(schema.schema) as [k, spec] (k)}
-                    <label class="flex flex-col gap-1">
-                        <span class="text-xs opacity-70">{spec.label ?? k}</span>
+                            {#if field.schema.enum}
+                                <select
+                                    class="select select-bordered"
+                                    value={asString(options[field.key])}
+                                    disabled={field.readonly}
+                                    required={field.required}
+                                    aria-label={field.label}
+                                    onchange={(event) =>
+                                        setOption(field.key, (event.target as HTMLSelectElement).value)}
+                                >
+                                    {#each field.schema.enum as option}
+                                        <option value={asString(option)}>{asString(option)}</option>
+                                    {/each}
+                                </select>
+                            {:else if field.schema.type === 'boolean' && !field.readonly}
+                                <input
+                                    class="checkbox"
+                                    type="checkbox"
+                                    checked={Boolean(options[field.key])}
+                                    disabled={field.readonly}
+                                    aria-label={field.label}
+                                    onchange={(event) =>
+                                        setOption(field.key, (event.target as HTMLInputElement).checked)}
+                                />
+                            {:else if field.schema.type === 'integer' || field.schema.type === 'number'}
+                                <input
+                                    class="input input-bordered"
+                                    type="number"
+                                    min={getMin(field.schema)}
+                                    max={getMax(field.schema)}
+                                    step={field.schema.type === 'integer' ? 1 : (field.schema.step ?? 'any')}
+                                    value={asNumberInputValue(options[field.key])}
+                                    readonly={field.readonly}
+                                    required={field.required}
+                                    aria-label={field.label}
+                                    oninput={(event) => {
+                                        const value = (event.target as HTMLInputElement).value;
+                                        setOption(field.key, value === '' ? '' : Number(value));
+                                    }}
+                                />
+                            {:else}
+                                <input
+                                    class="input input-bordered"
+                                    type="text"
+                                    value={asString(options[field.key])}
+                                    readonly={field.readonly}
+                                    required={field.required}
+                                    aria-label={field.label}
+                                    oninput={(event) =>
+                                        setOption(field.key, (event.target as HTMLInputElement).value)}
+                                />
+                            {/if}
 
-                        {#if spec.type === 'number'}
-                            <input
-                                class="input input-bordered"
-                                type="number"
-                                min={spec.min}
-                                max={spec.max}
-                                step={spec.step ?? 1}
-                                value={typeof options[k] === 'number' ||
-                                typeof options[k] === 'string'
-                                    ? (options[k] as any)
-                                    : ''}
-                                oninput={(e) => {
-                                    const v = (e.target as HTMLInputElement).value;
-                                    setOption(k, v === '' ? '' : Number(v));
-                                }}
-                            />
-                        {:else if spec.type === 'boolean'}
-                            <input
-                                class="checkbox"
-                                type="checkbox"
-                                checked={Boolean(options[k])}
-                                onchange={(e) =>
-                                    setOption(k, (e.target as HTMLInputElement).checked)}
-                            />
-                        {:else}
-                            <!-- text -->
-                            <input
-                                class="input input-bordered"
-                                type="text"
-                                value={asString(options[k])}
-                                oninput={(e) => setOption(k, (e.target as HTMLInputElement).value)}
-                            />
-                        {/if}
-                    </label>
-                {/each}
-            </div>
+                            {#if field.schema.description}
+                                <span class="text-xs opacity-60">{field.schema.description}</span>
+                            {/if}
+                        </label>
+                    {/each}
+                </div>
+            {:else}
+                <p class="text-sm opacity-70">This pipeline profile does not define parameters.</p>
+            {/if}
         </section>
     {/if}
 
-    <!-- JSON editor -->
-    <section class="space-y-2">
-        <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold">JSON</h2>
-        </div>
-        <textarea
-            class="textarea textarea-bordered min-h-[220px] w-full font-mono text-sm leading-5"
-            spellcheck="false"
-            oninput={(e) => onJsonInput((e.target as HTMLTextAreaElement).value)}
-            >{jsonText}</textarea
-        >
-        {#if jsonError}
-            <div>
-                <span class="text-error-600 text-xs">Parse error: {jsonError}</span>
-            </div>
-        {/if}
-    </section>
-
-    <div class="mt-2">
+    <div class="group relative mt-2">
         <button
             type="submit"
             class="btn preset-filled-primary-500 w-full rounded-lg shadow-lg"
+            disabled={submitDisabled}
+            aria-describedby={submitDisabled ? 'submit-disabled-tooltip' : undefined}
             onclick={onSubmit}
         >
             Submit
         </button>
+        {#if submitDisabled}
+            <div
+                id="submit-disabled-tooltip"
+                role="tooltip"
+                class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden w-max max-w-xs -translate-x-1/2 rounded bg-black px-3 py-2 text-center text-xs text-white group-hover:block"
+            >
+                {submitDisabledReason}
+            </div>
+        {/if}
     </div>
 </div>
