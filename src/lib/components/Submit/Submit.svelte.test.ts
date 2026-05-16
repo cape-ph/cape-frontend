@@ -120,6 +120,37 @@ describe('Submit.svelte', () => {
         );
     });
 
+    it('shows a read-only JSON preview of the submission payload', async () => {
+        vi.mocked(getPipelineProfile).mockResolvedValue(runnableBactopiaDevProfile);
+
+        render(Submit, {
+            props: {
+                baseUrl: 'https://api.example.test',
+                bucketURI: 's3://example-bucket/pipeline-output'
+            }
+        });
+
+        const preview = screen.getByLabelText('Submission JSON preview');
+        expect(preview).toHaveAttribute('readonly');
+
+        await selectBactopiaDev();
+        await screen.findByText('aws_volumes');
+
+        expect(preview).toHaveValue(
+            JSON.stringify(
+                {
+                    pipelineName: 'Bactopia',
+                    pipelineVersion: 'dev',
+                    outputPath: 's3://example-bucket/pipeline-output',
+                    nextflowOptions:
+                        '--aws_volumes /opt/conda:/mnt/conda,/mnt/nextflow_shared_data:/mnt/nextflow_shared_data:ro -profile aws'
+                },
+                null,
+                2
+            )
+        );
+    });
+
     it('does not submit disabled pipelines', async () => {
         render(Submit, {
             props: {
@@ -187,6 +218,21 @@ describe('Submit.svelte', () => {
         await fireEvent.input(cpuInput, { target: { value: '16' } });
         await fireEvent.click(cacheCheckbox);
         await fireEvent.change(modeSelect, { target: { value: 'careful' } });
+
+        expect(screen.getByLabelText('Submission JSON preview')).toHaveValue(
+            JSON.stringify(
+                {
+                    pipelineName: 'Bactopia',
+                    pipelineVersion: 'dev',
+                    outputPath: 's3://example-bucket/pipeline-output',
+                    nextflowOptions:
+                        'sample SRR999 max_cpus 16 use_cache true mode careful -profile aws'
+                },
+                null,
+                2
+            )
+        );
+
         await fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
 
         expect(axios.post).toHaveBeenCalledWith('https://api.example.test/dap/submit', {

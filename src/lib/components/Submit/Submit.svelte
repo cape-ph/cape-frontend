@@ -83,6 +83,7 @@
             ? 'This pipeline is disabled and cannot be submitted.'
             : 'Select a pipeline and version before submitting.'
     );
+    const jsonPreview = $derived(JSON.stringify(serialize(), null, 2));
 
     $effect(() => {
         if (!outputPathInitialized) {
@@ -379,6 +380,17 @@
             {/if}
         </section>
     {/if}
+
+    <section class="space-y-2">
+        <h2 class="text-lg font-semibold">JSON</h2>
+        <textarea
+            class="textarea textarea-bordered min-h-[220px] w-full font-mono text-sm leading-5"
+            aria-label="Submission JSON preview"
+            readonly
+            spellcheck="false"
+            value={jsonPreview}
+        ></textarea>
+    </section>
 
     <div class="group relative mt-2">
         <button
