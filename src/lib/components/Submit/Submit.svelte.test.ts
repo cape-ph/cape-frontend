@@ -1,11 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import axios from 'axios';
-import { getPipelineProfile, getPipelines } from '$lib/pipeline';
-import type { PipelineProfile } from '$lib/pipeline';
+import { getWorkflows, getWorkflowProfiles } from '$lib/pipeline';
+import type { PipelineProfile, WorkflowDAG } from '$lib/pipeline';
 import Submit from './Submit.svelte';
-import { bactopiaDevProfile } from './__fixtures__/pipeline-profile';
-import { pipelines } from './__fixtures__/pipelines';
 
 vi.mock('axios', () => ({
     default: {
@@ -14,280 +12,153 @@ vi.mock('axios', () => ({
 }));
 
 vi.mock('$lib/pipeline', () => ({
-    getPipelines: vi.fn(),
-    getPipelineProfile: vi.fn()
+    getWorkflows: vi.fn(),
+    getWorkflowProfiles: vi.fn(),
+    compile: vi.fn(() => () => true) // Mock validator that always passes
 }));
 
-const runnableBactopiaDevProfile: PipelineProfile = {
-    ...bactopiaDevProfile,
-    pipelineRunnable: true
-};
+const mockWorkflows: WorkflowDAG[] = [
+    {
+        dag_id: 'test-workflow',
+        dag_display_name: 'Test Workflow',
+        description: 'Test workflow description',
+        is_paused: false
+    }
+];
 
-const editableProfile: PipelineProfile = {
-    ...bactopiaDevProfile,
-    pipelineRunnable: true,
-    parametersSchema: {
-        $schema: 'https://json-schema.org/draft/2020-12/schema',
-        type: 'object',
-        properties: {
-            sample: {
-                type: 'string',
-                title: 'Sample',
-                default: 'SRR123'
-            },
-            max_cpus: {
-                type: 'integer',
-                title: 'Max CPUs',
-                minimum: 1,
-                default: 8
-            },
-            use_cache: {
-                type: 'boolean',
-                title: 'Use cache',
-                default: false
-            },
-            mode: {
-                type: 'string',
-                title: 'Mode',
-                enum: ['fast', 'careful'],
-                default: 'fast'
-            },
-            '-profile': {
-                const: 'aws',
-                default: 'aws'
+const mockProfiles: PipelineProfile[] = [
+    {
+        pipelineName: 'Stage 1',
+        pipelineId: 'stage-1',
+        pipelineDescription: 'First stage',
+        project: 'test',
+        version: 'v1.0.0',
+        pipelineType: 'workflow',
+        parametersSchema: {
+            type: 'object',
+            properties: {
+                param1: { type: 'string', default: 'value1' }
             }
         },
-        required: ['sample']
+        submission: {
+            encoding: 'cli-string',
+            optionsFieldName: 'options'
+        }
     }
-};
-
-async function selectBactopiaDev() {
-    await waitFor(() => {
-        expect(screen.getByRole('option', { name: 'Bactopia' })).toBeInTheDocument();
-    });
-
-    await fireEvent.change(screen.getByLabelText('Select pipeline'), {
-        target: { value: 'Bactopia' }
-    });
-    await fireEvent.change(screen.getByLabelText('Select version'), {
-        target: { value: 'dev' }
-    });
-}
+];
 
 describe('Submit.svelte', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(getPipelines).mockResolvedValue(pipelines);
-        vi.mocked(getPipelineProfile).mockResolvedValue(bactopiaDevProfile);
+        vi.mocked(getWorkflows).mockResolvedValue(mockWorkflows);
+        vi.mocked(getWorkflowProfiles).mockResolvedValue(mockProfiles);
         vi.mocked(axios.post).mockResolvedValue({ data: {} });
     });
 
-    it('loads a selected pipeline profile and renders schema-derived option fields', async () => {
+    it('loads workflows and shows workflow selection', async () => {
         render(Submit, {
             props: {
-                baseUrl: 'https://api.example.test',
-                bucketURI: 's3://example-bucket/pipeline-output'
+                baseUrl: 'https://api.example.test'
             }
         });
 
-        const pipelineSelect = screen.getByLabelText('Select pipeline');
-
         await waitFor(() => {
-            expect(screen.getByRole('option', { name: 'Bactopia' })).toBeInTheDocument();
+            expect(screen.getByLabelText('Select workflow')).toBeInTheDocument();
         });
 
-        await fireEvent.change(pipelineSelect, { target: { value: 'Bactopia' } });
-        await fireEvent.change(screen.getByLabelText('Select version'), {
-            target: { value: 'dev' }
+        expect(screen.getByText('Test Workflow')).toBeInTheDocument();
+    });
+
+    it('fetches workflow profiles when a workflow is selected', async () => {
+        render(Submit, {
+            props: {
+                baseUrl: 'https://api.example.test'
+            }
         });
 
         await waitFor(() => {
-            expect(getPipelineProfile).toHaveBeenCalledWith(
+            expect(screen.getByText('Test Workflow')).toBeInTheDocument();
+        });
+
+        const select = screen.getByLabelText('Select workflow');
+        await fireEvent.change(select, { target: { value: 'test-workflow' } });
+
+        await waitFor(() => {
+            expect(getWorkflowProfiles).toHaveBeenCalledWith(
                 'https://api.example.test',
-                expect.objectContaining({
-                    pipeline_name: 'Bactopia',
-                    version: 'dev'
-                })
+                'test-workflow'
             );
         });
-
-        expect(await screen.findByText('aws_volumes')).toBeInTheDocument();
-        expect(screen.queryByText('--aws_volumes')).not.toBeInTheDocument();
-        expect(screen.getByDisplayValue('aws')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
-        expect(screen.getByRole('tooltip')).toHaveTextContent(
-            'This pipeline is disabled and cannot be submitted.'
-        );
     });
 
-    it('shows a read-only JSON preview of the submission payload', async () => {
-        vi.mocked(getPipelineProfile).mockResolvedValue(runnableBactopiaDevProfile);
-
+    it('shows workflow stages when profiles are loaded', async () => {
         render(Submit, {
             props: {
-                baseUrl: 'https://api.example.test',
-                bucketURI: 's3://example-bucket/pipeline-output'
+                baseUrl: 'https://api.example.test'
             }
-        });
-
-        const preview = screen.getByLabelText('Submission JSON preview');
-        expect(preview).toHaveAttribute('readonly');
-
-        await selectBactopiaDev();
-        await screen.findByText('aws_volumes');
-
-        expect(preview).toHaveValue(
-            JSON.stringify(
-                {
-                    pipelineName: 'Bactopia',
-                    pipelineVersion: 'dev',
-                    outputPath: 's3://example-bucket/pipeline-output',
-                    nextflowOptions:
-                        '--aws_volumes /opt/conda:/mnt/conda,/mnt/nextflow_shared_data:/mnt/nextflow_shared_data:ro -profile aws'
-                },
-                null,
-                2
-            )
-        );
-    });
-
-    it('does not submit disabled pipelines', async () => {
-        render(Submit, {
-            props: {
-                baseUrl: 'https://api.example.test',
-                bucketURI: 's3://example-bucket/pipeline-output'
-            }
-        });
-
-        await selectBactopiaDev();
-        await screen.findByText('aws_volumes');
-        await fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
-
-        expect(axios.post).not.toHaveBeenCalled();
-    });
-
-    it('submits default schema values using the configured cli-string field name', async () => {
-        vi.mocked(getPipelineProfile).mockResolvedValue(runnableBactopiaDevProfile);
-
-        render(Submit, {
-            props: {
-                baseUrl: 'https://api.example.test',
-                bucketURI: 's3://example-bucket/pipeline-output'
-            }
-        });
-
-        await selectBactopiaDev();
-        await screen.findByText('aws_volumes');
-        await fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
-
-        expect(axios.post).toHaveBeenCalledWith('https://api.example.test/dap/submit', {
-            pipelineName: 'Bactopia',
-            pipelineVersion: 'dev',
-            outputPath: 's3://example-bucket/pipeline-output',
-            nextflowOptions:
-                '--aws_volumes /opt/conda:/mnt/conda,/mnt/nextflow_shared_data:/mnt/nextflow_shared_data:ro -profile aws'
-        });
-    });
-
-    it('renders editable string, integer, boolean, enum, required, and const fields', async () => {
-        vi.mocked(getPipelineProfile).mockResolvedValue(editableProfile);
-
-        render(Submit, {
-            props: {
-                baseUrl: 'https://api.example.test',
-                bucketURI: 's3://example-bucket/pipeline-output'
-            }
-        });
-
-        await selectBactopiaDev();
-
-        const sampleInput = await screen.findByLabelText('Sample *');
-        const cpuInput = screen.getByLabelText('Max CPUs');
-        const cacheCheckbox = screen.getByLabelText('Use cache');
-        const modeSelect = screen.getByLabelText('Mode');
-        const profileInput = screen.getByLabelText('profile');
-
-        expect(sampleInput).toHaveValue('SRR123');
-        expect(cpuInput).toHaveValue(8);
-        expect(cacheCheckbox).not.toBeChecked();
-        expect(modeSelect).toHaveValue('fast');
-        expect(profileInput).toHaveValue('aws');
-        expect(profileInput).toHaveAttribute('readonly');
-
-        await fireEvent.input(sampleInput, { target: { value: 'SRR999' } });
-        await fireEvent.input(cpuInput, { target: { value: '16' } });
-        await fireEvent.click(cacheCheckbox);
-        await fireEvent.change(modeSelect, { target: { value: 'careful' } });
-
-        expect(screen.getByLabelText('Submission JSON preview')).toHaveValue(
-            JSON.stringify(
-                {
-                    pipelineName: 'Bactopia',
-                    pipelineVersion: 'dev',
-                    outputPath: 's3://example-bucket/pipeline-output',
-                    nextflowOptions:
-                        'sample SRR999 max_cpus 16 use_cache true mode careful -profile aws'
-                },
-                null,
-                2
-            )
-        );
-
-        await fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
-
-        expect(axios.post).toHaveBeenCalledWith('https://api.example.test/dap/submit', {
-            pipelineName: 'Bactopia',
-            pipelineVersion: 'dev',
-            outputPath: 's3://example-bucket/pipeline-output',
-            nextflowOptions: 'sample SRR999 max_cpus 16 use_cache true mode careful -profile aws'
-        });
-    });
-
-    it('clears generated parameters when profile loading fails', async () => {
-        vi.mocked(getPipelineProfile)
-            .mockResolvedValueOnce(runnableBactopiaDevProfile)
-            .mockRejectedValueOnce(new Error('profile unavailable'));
-
-        render(Submit, {
-            props: {
-                baseUrl: 'https://api.example.test',
-                bucketURI: 's3://example-bucket/pipeline-output'
-            }
-        });
-
-        await selectBactopiaDev();
-        expect(await screen.findByText('aws_volumes')).toBeInTheDocument();
-
-        await fireEvent.change(screen.getByLabelText('Select version'), {
-            target: { value: 'v3.2.0' }
         });
 
         await waitFor(() => {
-            expect(screen.queryByText('aws_volumes')).not.toBeInTheDocument();
+            expect(screen.getByText('Test Workflow')).toBeInTheDocument();
+        });
+
+        const select = screen.getByLabelText('Select workflow');
+        await fireEvent.change(select, { target: { value: 'test-workflow' } });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Stage 1: Stage 1/)).toBeInTheDocument();
         });
     });
 
-    it('renders an empty-parameters state for profiles without schema properties', async () => {
-        vi.mocked(getPipelineProfile).mockResolvedValue({
-            ...runnableBactopiaDevProfile,
-            parametersSchema: {
-                $schema: 'https://json-schema.org/draft/2020-12/schema',
-                type: 'object',
-                properties: {}
+    it('submit button is disabled when no workflow is selected', async () => {
+        render(Submit, {
+            props: {
+                baseUrl: 'https://api.example.test'
             }
         });
+
+        const submitButton = await screen.findByRole('button', { name: 'Submit Workflow' });
+        expect(submitButton).toBeDisabled();
+    });
+
+    it('shows submission preview without actually submitting', async () => {
+        // Mock window.alert
+        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
         render(Submit, {
             props: {
-                baseUrl: 'https://api.example.test',
-                bucketURI: 's3://example-bucket/pipeline-output'
+                baseUrl: 'https://api.example.test'
             }
         });
 
-        await selectBactopiaDev();
+        await waitFor(() => {
+            expect(screen.getByText('Test Workflow')).toBeInTheDocument();
+        });
 
-        expect(
-            await screen.findByText('This pipeline profile does not define parameters.')
-        ).toBeInTheDocument();
+        const select = screen.getByLabelText('Select workflow');
+        await fireEvent.change(select, { target: { value: 'test-workflow' } });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Stage 1: Stage 1/)).toBeInTheDocument();
+        });
+
+        const submitButton = screen.getByRole('button', { name: 'Submit Workflow' });
+        await fireEvent.click(submitButton);
+
+        await waitFor(() => {
+            // Should show alert with API call details
+            expect(alertSpy).toHaveBeenCalled();
+            const alertMessage = alertSpy.mock.calls[0][0];
+            expect(alertMessage).toContain('Would POST to:');
+            expect(alertMessage).toContain('/workflows/trigger?dagId=test-workflow');
+            expect(alertMessage).toContain('array format');
+        });
+
+        // Should NOT actually call axios.post
+        expect(axios.post).not.toHaveBeenCalled();
+
+        alertSpy.mockRestore();
+        consoleSpy.mockRestore();
     });
 });

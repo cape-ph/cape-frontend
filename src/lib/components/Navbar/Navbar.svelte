@@ -1,5 +1,6 @@
 <script lang="ts">
     import type { User } from 'oidc-client-ts';
+    import { resolve } from '$app/paths';
     import Menu from '../Menu/Menu.svelte';
 
     const {
@@ -25,7 +26,7 @@
 >
     <div class="container mx-auto flex h-14 items-center justify-between px-4">
         <!-- Brand -->
-        <a href="/" class="flex items-center gap-2">
+        <a href={resolve('/')} class="flex items-center gap-2">
             <img src={logo} alt="Cape Logo" class="h-10 sm:h-12" />
         </a>
 

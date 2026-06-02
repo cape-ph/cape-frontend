@@ -112,7 +112,7 @@
         const pack = tarPack(meta, components);
         const stream = chunkStream(pack, chunkSize);
 
-        const onProgress: OnProgress = (bytesSent, totalBytes, ctx) => {
+        const onProgress: OnProgress = (bytesSent, totalBytes) => {
             upload.bytesSent = bytesSent;
             upload.totalBytes = totalBytes;
         };
@@ -131,8 +131,8 @@
                     title: `Upload ${filename} completed.`
                 });
             }
-        } catch (err: any) {
-            if (err?.name === 'CanceledError') {
+        } catch (err: unknown) {
+            if (err && typeof err === 'object' && 'name' in err && err.name === 'CanceledError') {
                 toaster.info({
                     title: `Upload ${filename} canceled.`
                 });

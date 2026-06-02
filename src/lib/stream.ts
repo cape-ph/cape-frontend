@@ -2,7 +2,6 @@ import * as tar from 'tar-stream';
 import { Readable } from 'readable-stream';
 import { Buffer } from 'buffer';
 
-
 interface SampleMeta {
     sampleId: string;
     sampleType: string;
@@ -12,10 +11,9 @@ interface SampleMeta {
 
 const TAR_BLOCK_SIZE = 512;
 
-
 /**
  * Encode sample metadata into a bytes array
- * 
+ *
  * @param meta - the sample metadata
  * @returns the byte array
  */
@@ -24,10 +22,9 @@ function metaJsonBytes(meta: SampleMeta): Uint8Array<ArrayBuffer> {
     return new TextEncoder().encode(metaStr);
 }
 
-
 /**
  * Calculate the final size of the *.tar file.
- * 
+ *
  * @param meta - the sample metadata
  * @param files - the sequence of *.fasta.gz files
  * @returns the size of the final tar archive in bytes
@@ -52,23 +49,24 @@ export function tarSize(meta: SampleMeta, files: File[]): number {
     return numBytes;
 }
 
-
 function toReadableStream(stream: ReadableStream<Uint8Array>): Readable {
     const reader = stream.getReader();
     return new Readable({
         read() {
-            reader.read().then(({ done, value }) => {
-                if (done) this.push(null);
-                else this.push(Buffer.from(value));
-            }).catch(err => this.destroy(err));
+            reader
+                .read()
+                .then(({ done, value }) => {
+                    if (done) this.push(null);
+                    else this.push(Buffer.from(value));
+                })
+                .catch((err) => this.destroy(err));
         }
     });
 }
 
-
 /**
  * Construct the tar archive from a meta object and an array of files
- * 
+ *
  * @param meta - the sample metadata
  * @param files - the array of files
  * @returns the tar.Pack used to stream the tar file
@@ -84,8 +82,8 @@ export function tarPack(meta: SampleMeta, files: File[]): tar.Pack {
         const header = {
             name: `sequencing/${file.name}`,
             size: file.size,
-            mode: 0o644,
-        }
+            mode: 0o644
+        };
         const entry = pack.entry(header);
         toReadableStream(file.stream()).pipe(entry);
     }
@@ -93,7 +91,6 @@ export function tarPack(meta: SampleMeta, files: File[]): tar.Pack {
     pack.finalize();
     return pack;
 }
-
 
 export async function* chunkStream(
     nodeStream: AsyncIterable<Uint8Array, Buffer>,

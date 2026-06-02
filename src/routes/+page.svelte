@@ -34,10 +34,7 @@
                 </div>
             {:else if activeKey === 'submit'}
                 <div class="w-lg">
-                    <Submit
-                        baseUrl="https://api.cape-dev.org/capi-dev"
-                        bucketURI="s3://ccd-dlh-t-seqauto-result-raw-vbkt-s3-1e80821/pipeline-output"
-                    />
+                    <Submit baseUrl="https://api.cape-dev.org/capi-dev" />
                 </div>
             {:else if activeKey === 'report'}
                 <div>

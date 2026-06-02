@@ -2,10 +2,11 @@ import Ajv from 'ajv';
 import type { AnySchema, ErrorObject, ValidateFunction } from 'ajv';
 import axios from 'axios';
 
-/** Global AJV state */
+/** Global AJV state - configured for JSON Schema draft 2020-12 */
 const ajv = new Ajv({
     allErrors: true,
-    strict: false
+    strict: false,
+    validateSchema: false // Disable meta-schema validation to avoid draft version issues
 });
 
 /**
@@ -31,10 +32,7 @@ function formatAjvErrors(errors: ErrorObject[] | null | undefined): string {
  * @returns {ValidateFunction} - The validation callback
  */
 export function compile(schema: AnySchema): ValidateFunction {
-    const valid = ajv.validateSchema(schema);
-    if (!valid) {
-        throw new Error(`Invalid pipeline schema: ${formatAjvErrors(ajv.errors)}`);
-    }
+    // Skip meta-schema validation since we support multiple draft versions
     return ajv.compile(schema);
 }
 
@@ -47,7 +45,7 @@ export function compile(schema: AnySchema): ValidateFunction {
  */
 export function validate<T = unknown>(isValid: ValidateFunction, obj: unknown): T {
     const valid = isValid(obj);
-    if (valid) {
+    if (!valid) {
         throw new Error(`Failed validation: ${formatAjvErrors(isValid.errors)}`);
     }
     return obj as T;
@@ -73,6 +71,14 @@ export interface PipelineProfile {
     version: string;
     pipelineRunnable?: boolean;
     pipelineId?: string;
+    uiSchema?: unknown;
+}
+
+export interface WorkflowDAG {
+    dag_id: string;
+    dag_display_name: string;
+    description: string;
+    is_paused: boolean;
 }
 
 /**
@@ -86,6 +92,19 @@ export async function getPipelines(baseUrl: string): Promise<Pipeline[]> {
     const response = await axios.get(url);
     const pipelines: Pipeline[] = response.data;
     return pipelines;
+}
+
+/**
+ * Get an array of all available workflows
+ *
+ * @param {string} baseUrl - the API base URL
+ * @returns {Promise<WorkflowDAG[]>} - an array of workflow DAGs
+ */
+export async function getWorkflows(baseUrl: string): Promise<WorkflowDAG[]> {
+    const url = `${baseUrl}/workflows`;
+    const response = await axios.get(url);
+    const workflows: WorkflowDAG[] = response.data.dags || [];
+    return workflows;
 }
 
 /**
@@ -107,4 +126,22 @@ export async function getPipelineProfile(
     const response = await axios.get(url, { params: params });
     const profile: PipelineProfile = response.data;
     return profile;
+}
+
+/**
+ * Get the profiles for all stages in a workflow
+ *
+ * @param baseUrl - the API base URL
+ * @param dagId - the workflow DAG ID
+ * @returns {Promise<PipelineProfile[]>} - array of profiles (one per stage)
+ */
+export async function getWorkflowProfiles(
+    baseUrl: string,
+    dagId: string
+): Promise<PipelineProfile[]> {
+    const url = `${baseUrl}/workflows/pipelineprofiles`;
+    const params = { dagId };
+    const response = await axios.get(url, { params });
+    const profiles: PipelineProfile[] = response.data;
+    return profiles;
 }

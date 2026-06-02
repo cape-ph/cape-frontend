@@ -1,10 +1,9 @@
 <script lang="ts">
     import type { Upload } from './types';
-    import CircleX from '@lucide/svelte/icons/circle-x';
 
     const {
         filename,
-        upload,
+        upload
     }: {
         filename: string;
         upload: Upload;
@@ -37,7 +36,6 @@
             </div>
         </div>
     </div>
-
 
     <div
         class="bg-surface-200/60 dark:bg-surface-800/60 mt-2 h-2 w-full overflow-hidden rounded"

@@ -1,5 +1,3 @@
-
-
 export interface Upload {
     /** The destination S3 key */
     // key: string;
@@ -15,8 +13,7 @@ export interface Upload {
 
     /** The abort upload controller */
     controller?: AbortController;
-};
-
+}
 
 export interface RejectFile {
     file: File;

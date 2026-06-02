@@ -37,10 +37,17 @@
             });
 
             html = typeof result.data === 'string' ? result.data : String(result.data);
-        } catch (err: any) {
+        } catch (err: unknown) {
+            const message =
+                err &&
+                typeof err === 'object' &&
+                'message' in err &&
+                typeof err.message === 'string'
+                    ? err.message
+                    : 'Unknown error';
             toaster.error({
                 title: 'Failed to load report',
-                description: err?.message ?? 'Unknown error'
+                description: message
             });
         } finally {
             loading = false;
@@ -53,43 +60,42 @@
 </div>
 
 <div class="w-lg">
-<div class="space-y-6">
-    <section class="space-y-3">
-        <h2 class="text-lg font-semibold">Metadata</h2>
-        <div class="grid grid-cols-1 gap-3">
-            <label class="flex flex-col gap-1">
-                <span class="text-xs opacity-70">sampleId</span>
-                <input
-                    class="input input-bordered"
-                    type="text"
-                    bind:value={sampleId}
-                    aria-label="Sample ID"
-                />
-            </label>
-        </div>
-        <button class="btn preset-filled-primary-500 mt-2" onclick={onLoad}>Load Report</button>
-    </section>
-</div>
+    <div class="space-y-6">
+        <section class="space-y-3">
+            <h2 class="text-lg font-semibold">Metadata</h2>
+            <div class="grid grid-cols-1 gap-3">
+                <label class="flex flex-col gap-1">
+                    <span class="text-xs opacity-70">sampleId</span>
+                    <input
+                        class="input input-bordered"
+                        type="text"
+                        bind:value={sampleId}
+                        aria-label="Sample ID"
+                    />
+                </label>
+            </div>
+            <button class="btn preset-filled-primary-500 mt-2" onclick={onLoad}>Load Report</button>
+        </section>
+    </div>
 </div>
 
 {#if loading}
-<div class="w-lg">
-<p style="margin-top: .75rem; color:#475569;">Loading…</p>
-</div>
+    <div class="w-lg">
+        <p style="margin-top: .75rem; color:#475569;">Loading…</p>
+    </div>
 {:else if html}
-    
-<div class="w-6xl">
-    <iframe
-        title="Embedded Report"
-        srcdoc={html}
-        sandbox=""
-        referrerpolicy="no-referrer"
-        loading="lazy"
-        style="width:100%; height:70vh; border:1px solid #e2e8f0; border-radius:12px; margin-top:.75rem; background:#fff;"
-    ></iframe>
-</div>
+    <div class="w-6xl">
+        <iframe
+            title="Embedded Report"
+            srcdoc={html}
+            sandbox=""
+            referrerpolicy="no-referrer"
+            loading="lazy"
+            style="width:100%; height:70vh; border:1px solid #e2e8f0; border-radius:12px; margin-top:.75rem; background:#fff;"
+        ></iframe>
+    </div>
 {:else}
-<div class="w-lg">
-<p style="margin-top:.75rem; color:#64748b;">No report loaded yet.</p>
-</div>
+    <div class="w-lg">
+        <p style="margin-top:.75rem; color:#64748b;">No report loaded yet.</p>
+    </div>
 {/if}

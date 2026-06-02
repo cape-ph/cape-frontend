@@ -60,7 +60,7 @@ export async function multiPartUpload(
     try {
         const result = await sendMultipartUpload(stream, streamSize, uploadId, params);
         return result;
-    } catch (err: any) {
+    } catch (err: unknown) {
         await abortMultipartUpload(uploadId, params);
         throw err;
     }
@@ -120,7 +120,6 @@ export async function sendMultipartUpload(
     uploadId: string,
     params: MultipartUploadParams
 ): Promise<MultipartUploadResult | undefined> {
-
     const partSize = DEFAULT_PART_SIZE;
     const numParts = Math.ceil(streamSize / partSize);
     const urls = await openMultipartUpload(uploadId, numParts, params);
@@ -214,15 +213,23 @@ async function openMultipartUpload(
     }
 
     // Normalize & validate items
-    const items: PartUrl[] = data.map((item: any) => {
+    const items: PartUrl[] = data.map((item: unknown) => {
+        if (!item || typeof item !== 'object') {
+            throw new Error(`Invalid item in response: ${JSON.stringify(item)}`);
+        }
+        const record = item as Record<string, unknown>;
         const partNumber =
-            typeof item?.partNumber === 'string' ? Number(item.partNumber) : item?.partNumber;
+            typeof record.partNumber === 'string' ? Number(record.partNumber) : record.partNumber;
 
-        if (!Number.isInteger(partNumber) || partNumber <= 0 || typeof item?.url !== 'string') {
+        if (
+            !Number.isInteger(partNumber) ||
+            (typeof partNumber === 'number' && partNumber <= 0) ||
+            typeof record.url !== 'string'
+        ) {
             throw new Error(`Invalid item in response: ${JSON.stringify(item)}`);
         }
 
-        return { partNumber, url: item.url };
+        return { partNumber: partNumber as number, url: record.url };
     });
 
     // Sort by partNumber
@@ -303,7 +310,7 @@ async function doMultipartUpload(
                         headers &&
                         typeof headers === 'object' &&
                         'etag' in headers &&
-                        typeof (headers as any).etag === 'string'
+                        typeof headers.etag === 'string'
                     ) {
                         const eTag: string = headers.etag;
                         uploaded.push({ partNumber, eTag });
@@ -325,7 +332,7 @@ async function doMultipartUpload(
                 throw new Error(
                     `Part ${partNumber} upload failed: ${resp.status} ${resp.statusText} - ${snippet}`
                 );
-            } catch (err: any) {
+            } catch (err: unknown) {
                 // Continue trying if we had a network drop
                 const isNetworkError = axios.isAxiosError(err) && !err.response;
                 if (isNetworkError && attempt <= numRetries) {
