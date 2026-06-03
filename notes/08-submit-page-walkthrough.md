@@ -1,5 +1,13 @@
 # Submit Page - Complete Walkthrough
 
+**Archived note (2026-06-03)**: This walkthrough describes the earlier
+single-pipeline Submit page that fetched `/dap/pipelines`, selected a pipeline/version,
+and posted to `/dap/submit`. The current Submit page is workflow-based: it fetches
+`/workflows`, loads an ordered profile array from `/workflows/pipelineprofiles`, renders
+one stage form per profile, validates with `src/lib/schema.ts`, and keeps
+`/workflows/trigger` preview-only. Treat the detailed trace below as historical context
+until this document is fully rewritten.
+
 A detailed trace of the Submit page lifecycle from initial load through form submission.
 
 ---

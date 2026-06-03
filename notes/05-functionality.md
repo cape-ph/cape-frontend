@@ -104,29 +104,32 @@
 
 ---
 
-### 3. Pipeline Submission
+### 3. Workflow Submission Preview
 
-**What**: Submit bioinformatics analysis pipelines with dynamically generated parameter forms
+**What**: Preview workflow trigger payloads with dynamically generated parameter forms
+for each pipeline stage.
 
 **User Workflow**:
 
 1. Navigate to Submit tab
-2. Select pipeline name from dropdown
-3. Select pipeline version from dropdown
-4. Form fields appear based on pipeline's parameter schema
-5. Fill in required/optional parameters
-6. View JSON preview of submission
-7. Click Submit button
-8. Receive success/error notification
+2. Select workflow from dropdown
+3. Frontend fetches the ordered pipeline profile list for that workflow
+4. One stage form appears for each pipeline profile
+5. Fill in required/optional parameters for each stage
+6. Review the advanced JSON preview when needed
+7. Click Submit to validate and display the preview-only payload alert
 
 **Schema-Driven Form Generation**:
 
 The form is **not hardcoded**. Instead:
 
-1. When user selects pipeline version, frontend fetches `PipelineProfile`
+1. When user selects a workflow, frontend fetches `PipelineProfile[]`
 2. `PipelineProfile.parametersSchema` is a JSON Schema object
-3. Component introspects schema properties to determine field types
-4. Form fields generated dynamically:
+3. `src/lib/schema.ts` dereferences local `$ref` values and flattens `allOf`
+   composition for field extraction
+4. Unsupported branch schemas such as `anyOf` and `oneOf` fail visibly because they
+   need an explicit UI choice
+5. Form fields generated dynamically:
 
 **Field Type Mapping**:
 
@@ -156,54 +159,48 @@ The form is **not hardcoded**. Instead:
 
 **Validation**:
 
-- Schema compiled to AJV validation function
-- Validation happens before submission
-- If validation fails, error displayed via toast
-- No submission occurs until validation passes
+- Schema compiled to AJV validation functions per stage
+- User-entered values are coerced to schema types before validation
+- Validation happens before preview submission
+- If validation fails, inline field errors and stage error counts are shown
+- Preview submission is blocked until every stage validates
 
 **Serialization**:
 
-Two encoding modes (determined by `submission.encoding` in profile):
+Each stage serializes according to `submission.encoding` in that stage profile.
 
 1. **CLI String** (`cli-string`):
 
     ```json
-    {
-        "pipelineName": "bactopia",
-        "pipelineVersion": "3.1.0",
-        "outputPath": "s3://bucket/path",
-        "options": "--genome_size 5.0 --min_contig_length 500"
-    }
+    { "options": "--genome_size 5.0 --min_contig_length 500" }
     ```
 
 2. **JSON** (other values):
     ```json
-    {
-        "pipelineName": "bactopia",
-        "pipelineVersion": "3.1.0",
-        "outputPath": "s3://bucket/path",
-        "parameters": {
-            "--genome_size": "5.0",
-            "--min_contig_length": 500
-        }
-    }
+    { "parameters": { "--genome_size": "5.0", "--min_contig_length": 500 } }
     ```
+
+The full workflow trigger payload is an ordered array with one serialized object per
+pipeline profile returned by `/workflows/pipelineprofiles`. It must stay array-shaped
+so workflows that repeat the same pipeline can preserve stage identity.
 
 **JSON Preview**:
 
-- Real-time preview of submission JSON
+- Collapsible advanced preview of the ordered workflow payload
 - Updates as user fills form
-- Helps users understand what will be submitted
+- Helps users understand what would be submitted when backend triggering is enabled
 
 **Pipeline Runnable Flag**:
 
 - `pipelineRunnable: false` in profile -> Submit button disabled
-- Tooltip explains why submission disabled
+- Stage messaging explains why preview submission is disabled
 
 **Implementation Files**:
 
-- `Submit.svelte`: Form generation and submission logic
-- `pipeline.ts`: API client and AJV validation
+- `Submit.svelte`: Workflow selection, form rendering, validation orchestration, preview alert
+- `pipeline.ts`: API client and schema helper re-exports
+- `schema.ts`: AJV compile/validate helpers, schema field extraction, default/coercion
+  helpers, and CLI option serialization
 
 ---
 
@@ -289,8 +286,8 @@ Two encoding modes (determined by `submission.encoding` in profile):
 
 - Schema-based validation via AJV
 - Validates required fields, types, ranges, enums
-- Error messages formatted with field path + constraint
-- Example: `(root)/--genome_size is required`
+- Error messages are mapped to the relevant stage field where possible
+- Errors clear when the user edits the field
 
 ### Network Error Handling
 
@@ -310,7 +307,7 @@ Two encoding modes (determined by `submission.encoding` in profile):
 
 ## Accessibility
 
-- All form inputs have `aria-label` attributes
+- All form inputs have accessible labels plus `id` and `name` attributes
 - Buttons have `aria-describedby` for disabled state tooltips
 - Semantic HTML (nav, main, section, label)
 - Keyboard navigation support
@@ -332,11 +329,13 @@ Two encoding modes (determined by `submission.encoding` in profile):
 - UI only re-renders when progress state changes (Svelte reactivity)
 - No performance degradation for large uploads
 
-### Schema Caching
+### Schema Fetching
 
-- Pipeline profiles cached between form updates
-- Only re-fetches on pipeline/version change
-- Prevents unnecessary API calls
+- Workflow profiles are fetched when workflow selection changes
+- Stale profile responses are ignored if the user changes workflow before a request
+  finishes
+- Profile state is cleared immediately on workflow change so old forms cannot be
+  submitted accidentally
 
 ### Lazy Loading
 

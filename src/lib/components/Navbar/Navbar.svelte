@@ -17,7 +17,7 @@
         onSelect: (key: string) => void;
     } = $props();
 
-    const email = user.profile.email;
+    const email = $derived(user.profile.email);
     let avatarUrl: string | null = $state(null);
 </script>
 
@@ -34,7 +34,7 @@
         <Menu {links} {activeKey} {onSelect} />
 
         <!-- User section -->
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-4 text-gray-950 dark:text-gray-100">
             <div class="flex items-center gap-2">
                 {#if avatarUrl}
                     <img
@@ -44,12 +44,12 @@
                     />
                 {:else}
                     <div
-                        class="bg-surface-300-700 text-surface-600-200 flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold"
+                        class="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-900 dark:bg-surface-700 dark:text-gray-100"
                     >
                         {email?.[0]?.toUpperCase()}
                     </div>
                 {/if}
-                <span class="ml-2 text-sm">{email}</span>
+                <span class="ml-2 text-sm font-medium">{email}</span>
             </div>
         </div>
     </div>

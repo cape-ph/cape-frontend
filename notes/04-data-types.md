@@ -40,7 +40,8 @@ interface Pipeline {
 }
 ```
 
-**Used In**: Pipeline list dropdown, version selection
+**Used In**: Legacy DAP helpers and direct single-pipeline integrations. The current
+Submit tab uses workflow DAGs.
 
 ---
 
@@ -69,6 +70,39 @@ interface PipelineProfile {
 
 ---
 
+### WorkflowDAG
+
+Workflow DAG summary returned by the workflow API.
+
+```typescript
+interface WorkflowDAG {
+    dag_id: string;
+    dag_display_name: string;
+    description: string;
+    is_paused: boolean;
+}
+```
+
+**Used In**: Submit workflow selection
+
+---
+
+### WorkflowTriggerRequest
+
+Ordered workflow trigger payload. Each array item is the compiled Nextflow options
+object for one pipeline profile returned by `/workflows/pipelineprofiles`.
+
+```typescript
+type WorkflowTriggerRequest = Array<Record<string, unknown>>;
+```
+
+The array order must match the pipeline profile response order. This avoids ambiguity
+when a workflow uses the same pipeline more than once.
+
+**Used In**: Submit preview serialization and future `/workflows/trigger` calls
+
+---
+
 ### SchemaProperty
 
 JSON Schema property definition for a single parameter.
@@ -89,7 +123,7 @@ type SchemaProperty = {
 };
 ```
 
-**Used In**: Dynamic form field generation in Submit component
+**Used In**: Dynamic form field generation through `src/lib/schema.ts`
 
 ---
 
@@ -107,7 +141,26 @@ type ParameterField = {
 };
 ```
 
-**Used In**: Form rendering logic
+**Used In**: Submit form rendering logic
+
+---
+
+### UnsupportedSchemaError
+
+Thrown when schema field extraction encounters a JSON Schema construct that needs
+additional UI state before it can be rendered correctly.
+
+```typescript
+class UnsupportedSchemaError extends Error {
+    constructor(keyword: 'anyOf' | 'oneOf');
+}
+```
+
+`allOf` and local `$ref` composition are flattened for field extraction. `anyOf` and
+`oneOf` fail visibly because rendering them requires an explicit user choice between
+schema branches.
+
+**Used In**: Submit schema error handling
 
 ---
 

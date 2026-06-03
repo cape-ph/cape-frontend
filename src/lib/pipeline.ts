@@ -1,55 +1,6 @@
-import Ajv from 'ajv';
-import type { AnySchema, ErrorObject, ValidateFunction } from 'ajv';
+import type { AnySchema } from 'ajv';
 import axios from 'axios';
-
-/** Global AJV state - configured for JSON Schema draft 2020-12 */
-const ajv = new Ajv({
-    allErrors: true,
-    strict: false,
-    validateSchema: false // Disable meta-schema validation to avoid draft version issues
-});
-
-/**
- * Format Ajv errors into a readable string.
- */
-function formatAjvErrors(errors: ErrorObject[] | null | undefined): string {
-    if (!errors || errors.length === 0) {
-        return 'Unknown validation error';
-    }
-
-    return errors
-        .map((err) => {
-            const path = err.instancePath || '(root)';
-            return `${path} ${err.message ?? 'is invalid'}`;
-        })
-        .join('; ');
-}
-
-/**
- * Compile a schema validation function.
- *
- * @param {AnySchema} schema - The JSON schema
- * @returns {ValidateFunction} - The validation callback
- */
-export function compile(schema: AnySchema): ValidateFunction {
-    // Skip meta-schema validation since we support multiple draft versions
-    return ajv.compile(schema);
-}
-
-/**
- * Validate an object using a validation callback function.
- *
- * @param {ValidateFunction} isValid - The validation callback function.
- * @param {unknown} obj - The object to validate.
- * @returns {T} - The validated object.
- */
-export function validate<T = unknown>(isValid: ValidateFunction, obj: unknown): T {
-    const valid = isValid(obj);
-    if (!valid) {
-        throw new Error(`Failed validation: ${formatAjvErrors(isValid.errors)}`);
-    }
-    return obj as T;
-}
+export { compile, validate } from '$lib/schema';
 
 export interface Pipeline {
     pipeline_name: string;

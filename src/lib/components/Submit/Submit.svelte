@@ -1,38 +1,25 @@
 <script lang="ts">
     import { toaster } from '$lib/toaster';
-    import { getWorkflows, getWorkflowProfiles, compile } from '$lib/pipeline';
+    import { getWorkflows, getWorkflowProfiles } from '$lib/pipeline';
+    import {
+        coerceOptionsForValidation,
+        compile,
+        getCliOptionsString,
+        getDefaultOptions,
+        getParameterFields
+    } from '$lib/schema';
     import type { PipelineProfile, WorkflowDAG } from '$lib/pipeline';
+    import type { ParameterField } from '$lib/schema';
     import type { ValidateFunction } from 'ajv';
-    import { onMount } from 'svelte';
+    import { onMount, untrack } from 'svelte';
     import { SvelteMap } from 'svelte/reactivity';
 
     let { baseUrl } = $props<{ baseUrl: string }>();
 
-    type SchemaProperty = {
-        type?: 'string' | 'integer' | 'number' | 'boolean';
-        title?: string;
-        description?: string;
-        default?: unknown;
-        const?: unknown;
-        enum?: unknown[];
-        minimum?: number;
-        maximum?: number;
-        min?: number;
-        max?: number;
-        step?: number;
-    };
-
-    type ParameterField = {
-        key: string;
-        label: string;
-        schema: SchemaProperty;
-        required: boolean;
-        readonly: boolean;
-    };
-
     type ResolvedProfile = PipelineProfile & {
         resolvedFields?: ParameterField[];
         validator?: ValidateFunction;
+        schemaError?: string;
     };
 
     type ValidationError = {
@@ -45,9 +32,13 @@
     let selectedWorkflowDagId = $state('');
     let workflowOptions = $state<Record<string, Record<string, unknown>>>({});
     let validationErrors = $state<Record<string, ValidationError[]>>({});
+    let workflowProfileRequestId = 0;
 
     const workflowSubmitDisabled = $derived(!workflowProfiles || workflowProfiles.length === 0);
     const workflowJsonPreview = $derived(JSON.stringify(serializeWorkflow(), null, 2));
+    const selectedWorkflow = $derived(
+        workflows?.find((workflow) => workflow.dag_id === selectedWorkflowDagId)
+    );
 
     async function updateWorkflows() {
         try {
@@ -62,6 +53,8 @@
     }
 
     async function updateWorkflowProfiles(dagId: string) {
+        const requestId = ++workflowProfileRequestId;
+
         if (!dagId) {
             workflowProfiles = undefined;
             setWorkflowOptions({});
@@ -69,27 +62,49 @@
             return;
         }
 
+        workflowProfiles = undefined;
+        setWorkflowOptions({});
+        clearValidationErrors();
+
         try {
             const profiles = await getWorkflowProfiles(baseUrl, dagId);
 
-            // Resolve schema fields and compile validators for each profile
-            const resolvedProfiles: ResolvedProfile[] = profiles.map((prof) => {
-                const fields = getParameterFields(prof.parametersSchema);
-                let validator: ValidateFunction | undefined;
+            const resolvedProfiles: ResolvedProfile[] = await Promise.all(
+                profiles.map(async (prof) => {
+                    let fields: ParameterField[] = [];
+                    let validator: ValidateFunction | undefined;
+                    let schemaError: string | undefined;
 
-                try {
-                    validator = compile(prof.parametersSchema);
-                } catch (err) {
-                    console.error('[updateWorkflowProfiles] Failed to compile validator:', err);
-                }
+                    try {
+                        fields = await getParameterFields(prof.parametersSchema);
+                    } catch (err) {
+                        schemaError = err instanceof Error ? err.message : String(err);
+                        console.error('[updateWorkflowProfiles] Failed to extract fields:', err);
+                    }
 
-                return { ...prof, resolvedFields: fields, validator };
-            });
+                    try {
+                        validator = compile(prof.parametersSchema);
+                    } catch (err) {
+                        schemaError = err instanceof Error ? err.message : String(err);
+                        console.error('[updateWorkflowProfiles] Failed to compile validator:', err);
+                    }
+
+                    return { ...prof, resolvedFields: fields, validator, schemaError };
+                })
+            );
+
+            if (requestId !== workflowProfileRequestId) {
+                return;
+            }
 
             workflowProfiles = resolvedProfiles;
             initializeWorkflowOptions(resolvedProfiles);
             clearValidationErrors();
         } catch (err) {
+            if (requestId !== workflowProfileRequestId) {
+                return;
+            }
+
             workflowProfiles = undefined;
             setWorkflowOptions({});
             clearValidationErrors();
@@ -106,163 +121,15 @@
     });
 
     $effect(() => {
-        updateWorkflowProfiles(selectedWorkflowDagId);
+        const dagId = selectedWorkflowDagId;
+        untrack(() => updateWorkflowProfiles(dagId));
     });
-
-    function resolveSchema(schema: unknown): Record<string, SchemaProperty> {
-        if (!schema || typeof schema !== 'object') {
-            return {};
-        }
-
-        try {
-            // Clone to avoid mutations
-            const schemaCopy = JSON.parse(JSON.stringify(schema)) as {
-                properties?: Record<string, SchemaProperty>;
-                $defs?: Record<string, unknown>;
-                allOf?: unknown[];
-                anyOf?: unknown[];
-                oneOf?: unknown[];
-            };
-
-            // Start with top-level properties
-            const allProperties: Record<string, SchemaProperty> = {
-                ...(schemaCopy.properties || {})
-            };
-
-            // Helper to resolve a $ref path
-            function resolveRef(refString: string, rootSchema: typeof schemaCopy): unknown {
-                if (!refString.startsWith('#/')) {
-                    console.warn('[resolveSchema] External refs not supported:', refString);
-                    return null;
-                }
-
-                const path = refString.replace(/^#\//, '').split('/');
-                let current: unknown = rootSchema;
-
-                for (const segment of path) {
-                    if (current && typeof current === 'object' && segment in current) {
-                        current = (current as Record<string, unknown>)[segment];
-                    } else {
-                        return null;
-                    }
-                }
-
-                return current;
-            }
-
-            // Helper to merge properties from a schema
-            function mergeProperties(
-                targetProps: Record<string, SchemaProperty>,
-                sourceSchema: unknown,
-                depth = 0
-            ): void {
-                if (depth > 10) {
-                    console.warn('[resolveSchema] Max recursion depth reached');
-                    return;
-                }
-
-                if (!sourceSchema || typeof sourceSchema !== 'object') {
-                    return;
-                }
-
-                const source = sourceSchema as {
-                    $ref?: string;
-                    allOf?: unknown[];
-                    anyOf?: unknown[];
-                    oneOf?: unknown[];
-                    properties?: Record<string, SchemaProperty>;
-                };
-
-                // Handle $ref
-                if (source.$ref) {
-                    const resolved = resolveRef(source.$ref, schemaCopy);
-                    if (resolved) {
-                        mergeProperties(targetProps, resolved, depth + 1);
-                    }
-                    return;
-                }
-
-                // Handle allOf (merge all schemas)
-                if (source.allOf && Array.isArray(source.allOf)) {
-                    for (const item of source.allOf) {
-                        mergeProperties(targetProps, item, depth + 1);
-                    }
-                }
-
-                // Handle anyOf (merge all alternatives)
-                if (source.anyOf && Array.isArray(source.anyOf)) {
-                    for (const item of source.anyOf) {
-                        mergeProperties(targetProps, item, depth + 1);
-                    }
-                }
-
-                // Handle oneOf (merge all alternatives - UI will handle selection)
-                if (source.oneOf && Array.isArray(source.oneOf)) {
-                    for (const item of source.oneOf) {
-                        mergeProperties(targetProps, item, depth + 1);
-                    }
-                }
-
-                // Merge direct properties
-                if (source.properties) {
-                    Object.assign(targetProps, source.properties);
-                }
-            }
-
-            // Process root-level allOf/anyOf/oneOf
-            mergeProperties(allProperties, schemaCopy);
-
-            return allProperties;
-        } catch (err) {
-            console.error('[resolveSchema] Failed to resolve schema:', err);
-            // Fallback to simple top-level properties
-            const s = schema as { properties?: Record<string, SchemaProperty> };
-            return s.properties ?? {};
-        }
-    }
-
-    function getParameterFields(schema: unknown): ParameterField[] {
-        if (!schema || typeof schema !== 'object') {
-            return [];
-        }
-
-        const s = schema as {
-            required?: string[];
-        };
-
-        const allProperties = resolveSchema(schema);
-
-        return Object.entries(allProperties).map(([key, propertySchema]) => ({
-            key,
-            label: getFieldLabel(key, propertySchema),
-            schema: propertySchema,
-            required: s.required?.includes(key) ?? false,
-            readonly: 'const' in propertySchema
-        }));
-    }
-
-    function getFieldLabel(key: string, propertySchema: SchemaProperty): string {
-        return propertySchema.title ?? key.replace(/^-+/, '');
-    }
 
     function initializeWorkflowOptions(profiles: ResolvedProfile[]) {
         const newOptions: Record<string, Record<string, unknown>> = {};
         for (const prof of profiles) {
             const stageId = prof.pipelineId ?? prof.pipelineName;
-            // Use resolvedFields to get default values
-            const defaults: Record<string, unknown> = {};
-            for (const field of prof.resolvedFields ?? []) {
-                if ('default' in field.schema) {
-                    defaults[field.key] = field.schema.default;
-                } else if ('const' in field.schema) {
-                    defaults[field.key] = field.schema.const;
-                } else if (field.schema.type === 'boolean') {
-                    defaults[field.key] = false;
-                } else {
-                    defaults[field.key] = '';
-                }
-            }
-            newOptions[stageId] = defaults;
+            newOptions[stageId] = getDefaultOptions(prof.resolvedFields ?? []);
         }
         setWorkflowOptions(newOptions);
     }
@@ -297,55 +164,23 @@
     }
 
     function clearValidationErrors() {
-        for (const key of Object.keys(validationErrors)) {
-            delete validationErrors[key];
-        }
+        validationErrors = {};
     }
 
     function validateStage(profile: ResolvedProfile, stageId: string): boolean {
-        if (!profile.validator) {
-            console.warn('[validateStage] No validator for stage:', stageId);
-            return true;
+        if (profile.schemaError || !profile.validator) {
+            validationErrors[stageId] = [
+                {
+                    field: '__stage',
+                    message: profile.schemaError ?? 'Schema validator is unavailable'
+                }
+            ];
+            validationErrors = { ...validationErrors };
+            return false;
         }
 
         const stageData = workflowOptions[stageId] ?? {};
-
-        // Convert types for validation (HTML inputs give strings)
-        const typedData: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(stageData)) {
-            // Find the field schema to know the expected type
-            const field = (profile.resolvedFields ?? []).find((f) => f.key === key);
-
-            if (!field) {
-                // Field not in schema, include as-is
-                typedData[key] = value;
-                continue;
-            }
-
-            // Skip readonly/const fields - they're always valid
-            if (field.readonly) {
-                typedData[key] = value;
-                continue;
-            }
-
-            // Handle empty values
-            if (value === '' || value === null || value === undefined) {
-                // Don't include empty values - let required validation catch missing fields
-                continue;
-            }
-
-            // Type conversion based on schema
-            if (field.schema.type === 'integer' || field.schema.type === 'number') {
-                // Always try to convert - let NaN fail validation
-                const numValue = typeof value === 'number' ? value : Number(value);
-                typedData[key] = numValue;
-            } else if (field.schema.type === 'boolean') {
-                typedData[key] = Boolean(value);
-            } else {
-                // String or other types
-                typedData[key] = value;
-            }
-        }
+        const typedData = coerceOptionsForValidation(profile.resolvedFields ?? [], stageData);
 
         const valid = profile.validator(typedData);
 
@@ -396,6 +231,17 @@
 
             const errors = Array.from(errorsByField.values());
             validationErrors[stageId] = errors;
+            validationErrors = { ...validationErrors };
+            return false;
+        }
+
+        if (!valid) {
+            validationErrors[stageId] = [
+                {
+                    field: '__stage',
+                    message: 'Schema validation failed'
+                }
+            ];
             validationErrors = { ...validationErrors };
             return false;
         }
@@ -457,15 +303,42 @@
         return error?.message;
     }
 
-    function asString(value: unknown): string {
-        return typeof value === 'string' ? value : value == null ? '' : String(value);
+    function getStageSchemaError(stageId: string): string | undefined {
+        return validationErrors[stageId]?.find((error) => error.field === '__stage')?.message;
     }
 
-    function getCliOptionsString(options: Record<string, unknown>): string {
-        return Object.entries(options)
-            .filter(([, value]) => value !== undefined && value !== null && value !== '')
-            .map(([key, value]) => `${key} ${String(value)}`)
-            .join(' ');
+    function getFieldId(stageId: string, fieldKey: string): string {
+        return `field-${getDomToken(stageId)}-${getDomToken(fieldKey)}`;
+    }
+
+    function getErrorId(stageId: string, fieldKey: string): string {
+        return `error-${getDomToken(stageId)}-${getDomToken(fieldKey)}`;
+    }
+
+    function getHelpId(stageId: string, fieldKey: string): string {
+        return `help-${getDomToken(stageId)}-${getDomToken(fieldKey)}`;
+    }
+
+    function getDescribedBy(stageId: string, field: ParameterField, fieldError?: string): string {
+        const ids: string[] = [];
+
+        if (fieldError) {
+            ids.push(getErrorId(stageId, field.key));
+        }
+
+        if (field.schema.description) {
+            ids.push(getHelpId(stageId, field.key));
+        }
+
+        return ids.join(' ');
+    }
+
+    function getDomToken(value: string): string {
+        return value.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'field';
+    }
+
+    function asString(value: unknown): string {
+        return typeof value === 'string' ? value : value == null ? '' : String(value);
     }
 
     function serializeWorkflow(): unknown[] {
@@ -533,18 +406,24 @@
     }
 </script>
 
-<div class="mb-4 space-y-2">
-    <h2 class="text-primary-500 text-2xl font-semibold">Submit Workflow</h2>
+<div class="mb-5 space-y-2">
+    <h2 class="text-primary-700 dark:text-primary-300 text-2xl font-semibold">Submit Workflow</h2>
+    <p class="text-sm text-gray-700 dark:text-gray-300">
+        Configure each stage in order. Submissions are preview-only until workflow triggering is
+        enabled.
+    </p>
 </div>
 
-<div class="space-y-6">
+<div class="space-y-6 text-gray-950 dark:text-gray-100">
     <section class="space-y-3">
         <h2 class="text-lg font-semibold">Workflow Selection</h2>
         <div class="grid grid-cols-1 gap-3">
             <label class="flex flex-col gap-1">
-                <span class="text-xs opacity-70">Workflow</span>
+                <span class="text-xs font-medium text-gray-700 dark:text-gray-300">Workflow</span>
                 <select
-                    class="select select-bordered"
+                    id="workflow-selection"
+                    name="workflow-selection"
+                    class="select select-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100"
                     bind:value={selectedWorkflowDagId}
                     aria-label="Select workflow"
                     disabled={!workflows}
@@ -560,14 +439,21 @@
                     {/each}
                 </select>
             </label>
+            {#if selectedWorkflow?.description}
+                <p class="text-sm leading-6 text-gray-700 dark:text-gray-300">
+                    {selectedWorkflow.description}
+                </p>
+            {/if}
         </div>
     </section>
 
     {#if workflowProfiles && workflowProfiles.length > 0}
         <section class="space-y-3">
             <h2 class="text-lg font-semibold">Workflow Overview</h2>
-            <div class="card bg-surface-100-800-token border border-gray-300 p-4">
-                <p class="text-sm opacity-70 mb-4">
+            <div
+                class="rounded-lg border border-gray-300 bg-white p-4 shadow-sm dark:border-gray-600 dark:bg-surface-950"
+            >
+                <p class="mb-4 text-sm text-gray-700 dark:text-gray-300">
                     This workflow runs {workflowProfiles.length} analysis stage{workflowProfiles.length !==
                     1
                         ? 's'
@@ -577,23 +463,23 @@
                     {#each workflowProfiles as stage, idx (stage.pipelineId ?? stage.pipelineName)}
                         <div class="flex items-center gap-3">
                             <div
-                                class="flex-shrink-0 w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-semibold text-sm"
+                                class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold text-white"
                             >
                                 {idx + 1}
                             </div>
                             <div class="flex-1">
                                 <div class="font-semibold">{stage.pipelineName}</div>
                                 {#if stage.pipelineDescription}
-                                    <div class="text-sm opacity-70">
+                                    <div class="text-sm leading-6 text-gray-700 dark:text-gray-300">
                                         {stage.pipelineDescription}
                                     </div>
                                 {/if}
                             </div>
                         </div>
                         {#if idx < workflowProfiles.length - 1}
-                            <div class="ml-4 pl-3 border-l-2 border-blue-300 h-6 flex items-center">
+                            <div class="ml-4 flex h-6 items-center border-l-2 border-blue-400 pl-3">
                                 <svg
-                                    class="w-5 h-5 text-blue-500"
+                                    class="h-5 w-5 text-blue-500"
                                     fill="none"
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
@@ -616,23 +502,25 @@
             <h2 class="text-lg font-semibold">
                 Workflow Stages ({workflowProfiles.length} stages)
             </h2>
-            <div class="space-y-2">
+            <div class="space-y-3">
                 {#each workflowProfiles as stageProfile, index (stageProfile.pipelineId ?? stageProfile.pipelineName)}
                     {@const stageId = stageProfile.pipelineId ?? stageProfile.pipelineName}
                     {@const stageFields = stageProfile.resolvedFields ?? []}
                     {@const stageOpts = workflowOptions[stageId] ?? {}}
                     {@const stageErrorCount = getStageErrorCount(stageId)}
+                    {@const stageSchemaError = getStageSchemaError(stageId)}
                     <div
-                        class="card bg-surface-100-800-token border {stageErrorCount > 0
+                        class="rounded-lg border bg-white shadow-sm dark:bg-surface-950 {stageErrorCount >
+                        0
                             ? 'border-2 border-red-500'
-                            : 'border-gray-300'}"
+                            : 'border-gray-300 dark:border-gray-600'}"
                     >
                         <details class="p-4" open>
                             <summary
-                                class="cursor-pointer font-semibold text-lg flex items-center gap-2"
+                                class="flex cursor-pointer items-start gap-3 text-lg font-semibold"
                             >
                                 <svg
-                                    class="w-5 h-5 transition-transform details-chevron"
+                                    class="mt-1 h-5 w-5 flex-shrink-0 transition-transform details-chevron"
                                     fill="none"
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
@@ -644,23 +532,29 @@
                                         d="M19 9l-7 7-7-7"
                                     />
                                 </svg>
-                                <span>
-                                    Stage {index + 1}: {stageProfile.pipelineName}
-                                    {#if stageProfile.version}
-                                        <span class="text-sm opacity-70"
-                                            >({stageProfile.version})</span
-                                        >
-                                    {/if}
-                                    <span class="text-xs opacity-50 ml-2"
-                                        >• {stageFields.length} parameters</span
+                                <span class="flex min-w-0 flex-1 flex-col gap-1">
+                                    <span>
+                                        Stage {index + 1}: {stageProfile.pipelineName}
+                                        {#if stageProfile.version}
+                                            <span class="text-sm text-gray-700 dark:text-gray-300">
+                                                ({stageProfile.version})
+                                            </span>
+                                        {/if}
+                                    </span>
+                                    <span
+                                        class="text-xs font-medium text-gray-600 dark:text-gray-400"
                                     >
+                                        {stageFields.length} parameters{stageSchemaError
+                                            ? ' - schema needs review'
+                                            : ''}
+                                    </span>
                                 </span>
                                 {#if stageErrorCount > 0}
                                     <span
-                                        class="ml-auto flex items-center gap-1 text-red-600 bg-red-100 px-3 py-1 rounded-full text-sm font-semibold"
+                                        class="ml-auto flex flex-shrink-0 items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700 dark:bg-red-950 dark:text-red-100"
                                     >
                                         <svg
-                                            class="w-4 h-4"
+                                            class="h-4 w-4"
                                             fill="currentColor"
                                             viewBox="0 0 20 20"
                                         >
@@ -676,41 +570,60 @@
                             </summary>
                             <div class="mt-3 space-y-3">
                                 {#if stageProfile.pipelineDescription}
-                                    <p class="text-sm opacity-70">
+                                    <p class="text-sm leading-6 text-gray-700 dark:text-gray-300">
                                         {stageProfile.pipelineDescription}
                                     </p>
+                                {/if}
+
+                                {#if stageSchemaError}
+                                    <div
+                                        class="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-100"
+                                    >
+                                        {stageSchemaError}
+                                    </div>
                                 {/if}
 
                                 {#if stageFields.length > 0}
                                     <div class="grid grid-cols-1 gap-3">
                                         {#each stageFields as field (field.key)}
                                             {@const fieldError = getFieldError(stageId, field.key)}
+                                            {@const describedBy = getDescribedBy(
+                                                stageId,
+                                                field,
+                                                fieldError
+                                            )}
                                             <label class="flex flex-col gap-1">
-                                                <span class="text-xs opacity-70">
+                                                <span
+                                                    class="text-xs font-medium text-gray-700 dark:text-gray-300"
+                                                >
                                                     {field.label}{field.required ? ' *' : ''}
                                                 </span>
 
                                                 {#if field.readonly}
-                                                    <input
-                                                        class="input input-bordered opacity-50"
-                                                        type="text"
+                                                    <textarea
+                                                        id={getFieldId(stageId, field.key)}
+                                                        name={field.key}
+                                                        class="input input-bordered no-scrollbar h-[2.21rem] min-h-[2.21rem] w-full resize-none overflow-x-auto overflow-y-hidden whitespace-nowrap bg-gray-50 text-base leading-normal text-gray-600 dark:bg-surface-900 dark:text-gray-400"
                                                         value={asString(stageOpts[field.key])}
                                                         readonly
+                                                        rows="1"
+                                                        wrap="off"
                                                         aria-label={field.label}
+                                                        aria-describedby={describedBy || undefined}
                                                         title="This value is managed by the system and cannot be changed"
-                                                    />
+                                                    ></textarea>
                                                 {:else if field.schema.enum}
                                                     <select
-                                                        class="select select-bordered {fieldError
+                                                        id={getFieldId(stageId, field.key)}
+                                                        name={field.key}
+                                                        class="select select-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100 {fieldError
                                                             ? 'border-2 border-red-500'
                                                             : ''}"
                                                         value={asString(stageOpts[field.key])}
                                                         required={field.required}
                                                         aria-label={field.label}
                                                         aria-invalid={fieldError ? 'true' : 'false'}
-                                                        aria-describedby={fieldError
-                                                            ? `error-${stageId}-${field.key}`
-                                                            : undefined}
+                                                        aria-describedby={describedBy || undefined}
                                                         onchange={(event) =>
                                                             setWorkflowOption(
                                                                 stageId,
@@ -727,6 +640,8 @@
                                                     </select>
                                                 {:else if field.schema.type === 'boolean'}
                                                     <input
+                                                        id={getFieldId(stageId, field.key)}
+                                                        name={field.key}
                                                         class="checkbox {fieldError
                                                             ? 'border-2 border-red-500'
                                                             : ''}"
@@ -734,9 +649,7 @@
                                                         checked={Boolean(stageOpts[field.key])}
                                                         aria-label={field.label}
                                                         aria-invalid={fieldError ? 'true' : 'false'}
-                                                        aria-describedby={fieldError
-                                                            ? `error-${stageId}-${field.key}`
-                                                            : undefined}
+                                                        aria-describedby={describedBy || undefined}
                                                         onchange={(event) =>
                                                             setWorkflowOption(
                                                                 stageId,
@@ -747,19 +660,18 @@
                                                     />
                                                 {:else if field.schema.type === 'integer' || field.schema.type === 'number'}
                                                     <input
-                                                        class="input input-bordered {fieldError
+                                                        id={getFieldId(stageId, field.key)}
+                                                        name={field.key}
+                                                        class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100 {fieldError
                                                             ? 'border-2 border-red-500'
                                                             : ''}"
                                                         type="text"
                                                         inputmode="numeric"
                                                         value={asString(stageOpts[field.key])}
-                                                        readonly={field.readonly}
                                                         required={field.required}
                                                         aria-label={field.label}
                                                         aria-invalid={fieldError ? 'true' : 'false'}
-                                                        aria-describedby={fieldError
-                                                            ? `error-${stageId}-${field.key}`
-                                                            : undefined}
+                                                        aria-describedby={describedBy || undefined}
                                                         placeholder={field.schema.type === 'integer'
                                                             ? 'Enter an integer'
                                                             : 'Enter a number'}
@@ -776,18 +688,17 @@
                                                     />
                                                 {:else}
                                                     <input
-                                                        class="input input-bordered {fieldError
+                                                        id={getFieldId(stageId, field.key)}
+                                                        name={field.key}
+                                                        class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100 {fieldError
                                                             ? 'border-2 border-red-500'
                                                             : ''}"
                                                         type="text"
                                                         value={asString(stageOpts[field.key])}
-                                                        readonly={field.readonly}
                                                         required={field.required}
                                                         aria-label={field.label}
                                                         aria-invalid={fieldError ? 'true' : 'false'}
-                                                        aria-describedby={fieldError
-                                                            ? `error-${stageId}-${field.key}`
-                                                            : undefined}
+                                                        aria-describedby={describedBy || undefined}
                                                         oninput={(event) =>
                                                             setWorkflowOption(
                                                                 stageId,
@@ -800,11 +711,11 @@
 
                                                 {#if fieldError}
                                                     <div
-                                                        id="error-{stageId}-{field.key}"
-                                                        class="flex items-center gap-2 text-sm text-red-600 font-semibold bg-red-50 px-3 py-2 rounded border border-red-200"
+                                                        id={getErrorId(stageId, field.key)}
+                                                        class="flex items-center gap-2 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-100"
                                                     >
                                                         <svg
-                                                            class="w-5 h-5 flex-shrink-0"
+                                                            class="h-5 w-5 flex-shrink-0"
                                                             fill="currentColor"
                                                             viewBox="0 0 20 20"
                                                         >
@@ -819,7 +730,9 @@
                                                 {/if}
 
                                                 {#if field.schema.description}
-                                                    <span class="text-xs opacity-60"
+                                                    <span
+                                                        id={getHelpId(stageId, field.key)}
+                                                        class="text-xs leading-5 text-gray-600 dark:text-gray-400"
                                                         >{field.schema.description}</span
                                                     >
                                                 {/if}
@@ -827,7 +740,7 @@
                                         {/each}
                                     </div>
                                 {:else}
-                                    <p class="text-sm opacity-70">
+                                    <p class="text-sm text-gray-700 dark:text-gray-300">
                                         This stage does not define parameters.
                                     </p>
                                 {/if}
@@ -839,18 +752,27 @@
         </section>
     {/if}
 
-    <section class="space-y-2">
-        <h2 class="text-lg font-semibold">JSON</h2>
-        <textarea
-            class="textarea textarea-bordered min-h-[220px] w-full font-mono text-sm leading-5"
-            aria-label="Submission JSON preview"
-            readonly
-            spellcheck="false"
-            value={workflowJsonPreview}
-        ></textarea>
+    <section>
+        <details
+            class="rounded-lg border border-gray-300 bg-white p-4 dark:border-gray-600 dark:bg-surface-950"
+        >
+            <summary class="cursor-pointer text-lg font-semibold">Advanced Preview</summary>
+            <p class="mt-2 text-sm text-gray-700 dark:text-gray-300">
+                Ordered array payload preview. This does not submit the workflow.
+            </p>
+            <textarea
+                id="submission-json-preview"
+                name="submission-json-preview"
+                class="textarea textarea-bordered mt-3 min-h-[220px] w-full bg-white font-mono text-sm leading-5 text-gray-950 dark:bg-surface-950 dark:text-gray-100"
+                aria-label="Submission JSON preview"
+                readonly
+                spellcheck="false"
+                value={workflowJsonPreview}
+            ></textarea>
+        </details>
     </section>
 
-    <div class="group relative mt-2">
+    <div class="group relative mt-2 pb-8 sm:pb-10">
         <button
             type="submit"
             class="btn preset-filled-primary-500 w-full rounded-lg shadow-lg"

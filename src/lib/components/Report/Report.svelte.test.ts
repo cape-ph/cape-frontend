@@ -29,6 +29,8 @@ describe('Report.svelte', () => {
             }
         });
 
+        expect(screen.getByLabelText('Sample ID')).toHaveAttribute('name', 'report-sample-id');
+
         await fireEvent.click(screen.getByRole('button', { name: 'Load Report' }));
 
         expect(axios.get).not.toHaveBeenCalled();

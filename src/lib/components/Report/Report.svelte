@@ -55,47 +55,56 @@
     }
 </script>
 
-<div class="mb-4 space-y-2">
-    <h2 class="text-primary-500 text-2xl font-semibold">Report</h2>
+<div class="mb-5 space-y-2">
+    <h2 class="text-primary-700 dark:text-primary-300 text-2xl font-semibold">Report</h2>
+    <p class="text-sm text-gray-700 dark:text-gray-300">
+        Load a generated analysis report by sample ID.
+    </p>
 </div>
 
-<div class="w-lg">
+<div class="w-full text-gray-950 dark:text-gray-100">
     <div class="space-y-6">
         <section class="space-y-3">
             <h2 class="text-lg font-semibold">Metadata</h2>
             <div class="grid grid-cols-1 gap-3">
                 <label class="flex flex-col gap-1">
-                    <span class="text-xs opacity-70">sampleId</span>
+                    <span class="text-xs font-medium text-gray-700 dark:text-gray-300"
+                        >sampleId</span
+                    >
                     <input
-                        class="input input-bordered"
+                        id="report-sample-id"
+                        name="report-sample-id"
+                        class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100"
                         type="text"
                         bind:value={sampleId}
                         aria-label="Sample ID"
                     />
                 </label>
             </div>
-            <button class="btn preset-filled-primary-500 mt-2" onclick={onLoad}>Load Report</button>
+            <button class="btn preset-filled-primary-500 mt-2 rounded-lg shadow-lg" onclick={onLoad}
+                >Load Report</button
+            >
         </section>
     </div>
 </div>
 
 {#if loading}
-    <div class="w-lg">
-        <p style="margin-top: .75rem; color:#475569;">Loading…</p>
+    <div class="w-full">
+        <p class="mt-3 text-sm text-gray-700 dark:text-gray-300">Loading...</p>
     </div>
 {:else if html}
-    <div class="w-6xl">
+    <div class="w-full pb-8 sm:pb-10">
         <iframe
             title="Embedded Report"
             srcdoc={html}
             sandbox=""
             referrerpolicy="no-referrer"
             loading="lazy"
-            style="width:100%; height:70vh; border:1px solid #e2e8f0; border-radius:12px; margin-top:.75rem; background:#fff;"
+            class="mt-3 h-[70vh] w-full rounded-lg border border-gray-300 bg-white dark:border-gray-600"
         ></iframe>
     </div>
 {:else}
-    <div class="w-lg">
-        <p style="margin-top:.75rem; color:#64748b;">No report loaded yet.</p>
+    <div class="w-full pb-8 sm:pb-10">
+        <p class="mt-3 text-sm text-gray-700 dark:text-gray-300">No report loaded yet.</p>
     </div>
 {/if}

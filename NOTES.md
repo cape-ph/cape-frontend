@@ -11,13 +11,52 @@
 
 ### Last Updated
 
-2026-06-02 (AGENTS.md updated with development workflow guidance)
+2026-06-03 (Submit page review remediation and documentation update)
 
 ### Active Branch
 
-`19-use-jsonschema-from-pipelineprofile` - JSON Schema-based workflow form generation with validation (COMPLETE)
+`19-use-jsonschema-from-pipelineprofile` - JSON Schema-based workflow form generation with validation and review remediation
 
 ### Recent Work Completed
+
+#### Submit Page Review Remediation (2026-06-03) ✅
+
+- **Schema utilities extracted**:
+    - Added `src/lib/schema.ts` for AJV compile/validate helpers, JSON Schema field extraction, default option generation, validation coercion, and CLI option serialization
+    - Added `@apidevtools/json-schema-ref-parser` for maintained local `$ref` dereferencing
+    - Kept explicit field extraction logic for Submit rendering and fail-visible handling for unsupported `anyOf`/`oneOf`
+- **Submit workflow UX and correctness**:
+    - Preserved preview-only alert path
+    - Confirmed workflow payload remains an ordered array matching `/workflows/pipelineprofiles`
+    - Added request sequencing so stale profile responses cannot overwrite newer workflow selections
+    - Cleared old profiles immediately when workflow selection changes
+    - Improved form `id`, `name`, labels, error descriptions, readonly field display, and advanced preview treatment
+    - Increased light/dark mode contrast for Submit, Navbar, and Menu elements
+- **Tests and project health**:
+    - Added logic-focused schema tests for field extraction, unsupported schemas, validation coercion, defaults, and CLI quoting
+    - Updated Submit tests around behavior: ordered payload shape, stale responses, disabled states, validation clearing, and form accessibility attributes
+    - Fixed Vitest config deprecation, Cognito redirect env typo, Navbar Svelte warning, and mobile menu accessible name
+    - Removed unused DB scaffold files that imported missing DB dependencies
+- **Browser verification**:
+    - Verified Submit page in Chrome DevTools with local dev server
+    - Used local fake OIDC storage state for UI review because the attached Chrome session was not logged in
+    - Verified light mode, dark mode, mobile navigation, workflow selection, required-field validation, error clearing, and preview-only alert payload
+    - Fixed browser-only `Buffer is not defined` failure from `@apidevtools/json-schema-ref-parser`
+    - Residual console note: Chrome still reports missing `id`/`name` fields on Upload inputs, which is outside this Submit remediation scope
+
+#### Cross-Tab Visual Alignment Follow-up (2026-06-03) ✅
+
+- **Submit polish**:
+    - Made readonly const parameter textareas match editable input height, width, text size, and non-resizable behavior
+    - Hid readonly textarea scrollbars so immutable fields do not look like a separate control family
+    - Added bottom breathing room under the workflow submit action
+- **Upload and Report alignment**:
+    - Updated page titles, supporting copy, labels, inputs, buttons, and empty/loading text to match the Submit contrast and hierarchy pattern
+    - Added stable `id` and `name` attributes to Upload metadata controls and the Report sample ID control
+    - Confirmed Chrome no longer reports missing form `id`/`name` issues for the touched forms
+- **Validation**:
+    - `npm run lint`, `npm run check`, and `npm run test` passed
+    - Browser-checked light mode, dark mode, and mobile dark mode across the updated tabs
 
 #### AGENTS.md Development Workflow Guidance (2026-06-02) ✅
 
@@ -54,16 +93,16 @@
 #### Workflow Submission with JSON Schema Validation (2026-06-02) ✅ COMPLETE
 
 - **Replaced single pipeline submission with workflow orchestration**:
-    - Workflows fetched from `/workflows/workflows` endpoint
+    - Workflows fetched from `/workflows` endpoint
     - Workflow stages fetched from `/workflows/pipelineprofiles?dagId={dagId}`
-    - Submission endpoint changed to `/workflows/trigger?dagId={dagId}` with array payload
+    - Preview submission serializes the would-be `/workflows/trigger?dagId={dagId}` array payload
     - Removed old `/dap/pipelineprofile` single-pipeline logic
 
-- **Custom JSON Schema resolver** (no external dependencies):
-    - Handles `allOf`, `anyOf`, `oneOf` combinators
-    - Resolves `$ref` to `$defs` (local references only)
-    - Recursive merging with depth limit protection
-    - Exposes ALL schema properties including nested definitions
+- **JSON Schema field extraction**:
+    - Handles `allOf` composition
+    - Resolves local `$ref` values through `@apidevtools/json-schema-ref-parser`
+    - Exposes schema properties for dynamic form rendering
+    - Fails visibly for `anyOf` and `oneOf` because those need explicit branch-selection UI
 
 - **Client-side validation with AJV 8.18.0**:
     - Draft 2020-12 JSON Schema support
@@ -101,7 +140,8 @@
     - All tests passing (16/16)
 
 - **Files Modified**:
-    - `src/lib/pipeline.ts`: Fixed AJV config for draft 2020-12, fixed validation bug
+    - `src/lib/schema.ts`: Schema extraction, AJV helpers, option defaults/coercion, CLI serialization
+    - `src/lib/pipeline.ts`: API client plus schema helper re-exports
     - `src/lib/components/Submit/Submit.svelte`: Complete workflow orchestration rewrite
     - `src/lib/components/Submit/Submit.svelte.test.ts`: Updated tests for workflows
     - `src/routes/+page.svelte`: Removed unused `bucketURI` prop
@@ -154,14 +194,14 @@
 
 ### JSON Schema Resolution Strategy
 
-- **Problem**: JSON Schema uses `allOf`, `anyOf`, `oneOf`, `$ref`, and `$defs` to compose schemas
-- **Initial Approach**: Tried external libraries (`@json-schema-tools/dereferencer`, `json-schema-resolver`) - both had issues
-- **Final Solution**: Custom synchronous resolver in Submit.svelte
-    - Recursively walks schema tree
-    - Merges properties from combinators
-    - Resolves local `$ref` to `$defs`
-    - No external dependencies, ~80 lines of code
-    - Handles all schemas in CAPE API
+- **Problem**: JSON Schema uses `allOf`, `$ref`, `$defs`, and sometimes branch
+  combinators to compose pipeline parameters
+- **Current Solution**: `src/lib/schema.ts`
+    - Uses `@apidevtools/json-schema-ref-parser` for maintained local dereferencing
+    - Flattens `allOf` properties and required fields for field extraction
+    - Keeps AJV as the source of truth for validation
+    - Throws `UnsupportedSchemaError` for `anyOf`/`oneOf` because rendering those safely
+      requires branch-selection UI
 
 ### AJV Configuration for Draft 2020-12
 
@@ -208,22 +248,23 @@
 
 The Submit component is **completely dynamic**:
 
-1. User selects pipeline name + version
-2. `$effect()` watches derived `pipeline` object and triggers `updateProfile()`
-3. Fetches `PipelineProfile` containing `parametersSchema` (JSON Schema)
-4. `getParameterFields()` introspects schema and creates `ParameterField[]`
+1. User selects a workflow DAG
+2. `$effect()` triggers profile loading for the selected `dagId`
+3. Fetches ordered `PipelineProfile[]` from `/workflows/pipelineprofiles`
+4. `getParameterFields()` extracts fields from each stage schema
 5. Template renders form fields based on schema types
-6. No hardcoded pipeline knowledge in frontend
+6. Serialized payload remains an ordered array, one item per profile
+7. No hardcoded pipeline knowledge in frontend
 
 **Key Reactive Chain**:
 
 ```
-pipelineName + pipelineVersion (state)
-  -> pipeline (derived)
-  -> $effect triggers updateProfile()
-  -> profile (state from API)
-  -> parameterFields (derived via getParameterFields)
-  -> Template renders dynamic form
+selectedWorkflowDagId (state)
+  -> $effect triggers updateWorkflowProfiles()
+  -> workflowProfiles (ordered state from API)
+  -> profile.fields (from getParameterFields)
+  -> Template renders one dynamic form per stage
+  -> serializeWorkflow() returns ordered array payload
 ```
 
 ### Validation Gap Identified
@@ -308,7 +349,7 @@ PUBLIC_COGNITO_AUTHORITY=<AWS Cognito authority URL>
 PUBLIC_COGNITO_CLIENT_ID=<OAuth client ID>
 PUBLIC_COGNITO_REDIRECT_URI=<OAuth callback URL>
 # Optional:
-API_BASE=https://api.cape-dev.org/capi-dev  # has default
+PUBLIC_API_BASE=https://api.cape-dev.org/capi-dev  # has default
 ```
 
 ### Test Execution
@@ -447,9 +488,10 @@ node -e "const axios=require('axios');const https=require('https');(async()=>{co
     - `notes/10-workflows-submission-monitoring.md` - submission/monitoring flow analysis
     - `scratch/workflows-api-testing.md` - real API response collection
 - **Open Questions**:
-    - How to map `pipelineId` → request key name? Backend should provide `requestKey` field?
     - Should UISchema be implemented or ignored for MVP?
-- **Next**: Design multi-stage form UI, implement workflow selection, clarify requestKey mapping
+    - Resolved later: workflow trigger payload is an ordered array, not a keyed object,
+      so no `pipelineId` to request-key mapping is needed.
+- **Next**: Design multi-stage form UI and implement workflow selection
 
 ### Session 2026-06-02 (UI Design Phase)
 

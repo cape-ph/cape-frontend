@@ -1,20 +1,121 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import axios from 'axios';
 import { getWorkflows, getWorkflowProfiles } from '$lib/pipeline';
 import type { PipelineProfile, WorkflowDAG } from '$lib/pipeline';
 import Submit from './Submit.svelte';
 
-vi.mock('axios', () => ({
-    default: {
-        post: vi.fn()
-    }
-}));
-
 vi.mock('$lib/pipeline', () => ({
     getWorkflows: vi.fn(),
-    getWorkflowProfiles: vi.fn(),
-    compile: vi.fn(() => () => true) // Mock validator that always passes
+    getWorkflowProfiles: vi.fn()
+}));
+
+vi.mock('$lib/schema', () => ({
+    getParameterFields: vi.fn(async (schema: Record<string, unknown>) => {
+        const required = Array.isArray(schema.required) ? schema.required : [];
+        const properties = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+
+        return Object.entries(properties).map(([key, property]) => ({
+            key,
+            label: typeof property.title === 'string' ? property.title : key,
+            schema: property,
+            required: required.includes(key),
+            readonly: 'const' in property
+        }));
+    }),
+    getDefaultOptions: vi.fn((fields) =>
+        Object.fromEntries(
+            fields.map((field: { key: string; schema: Record<string, unknown> }) => {
+                if ('default' in field.schema) {
+                    return [field.key, field.schema.default];
+                }
+
+                if ('const' in field.schema) {
+                    return [field.key, field.schema.const];
+                }
+
+                if (field.schema.type === 'boolean') {
+                    return [field.key, false];
+                }
+
+                return [field.key, ''];
+            })
+        )
+    ),
+    coerceOptionsForValidation: vi.fn(
+        (
+            fields: Array<{ key: string; readonly: boolean; schema: Record<string, unknown> }>,
+            options: Record<string, unknown>
+        ) => {
+            const fieldsByKey = new Map(fields.map((field) => [field.key, field]));
+
+            return Object.fromEntries(
+                Object.entries(options).flatMap(([key, value]) => {
+                    const field = fieldsByKey.get(key);
+                    if (value === '' || value === null || value === undefined) {
+                        return [];
+                    }
+
+                    if (!field || field.readonly) {
+                        return [[key, value]];
+                    }
+
+                    if (field.schema.type === 'integer') {
+                        return [[key, Number(value)]];
+                    }
+
+                    return [[key, value]];
+                })
+            );
+        }
+    ),
+    getCliOptionsString: vi.fn((options: Record<string, unknown>) =>
+        Object.entries(options)
+            .filter(([, value]) => value !== undefined && value !== null && value !== '')
+            .map(([key, value]) => `${key} ${String(value)}`)
+            .join(' ')
+    ),
+    compile: vi.fn(
+        (schema: { required?: string[]; properties?: Record<string, { type?: string }> }) => {
+            const validator = ((data: Record<string, unknown>) => {
+                const errors: Array<{
+                    instancePath: string;
+                    keyword: string;
+                    message?: string;
+                    params?: Record<string, unknown>;
+                }> = [];
+
+                for (const key of schema.required ?? []) {
+                    if (!(key in data)) {
+                        errors.push({
+                            instancePath: '',
+                            keyword: 'required',
+                            params: { missingProperty: key }
+                        });
+                    }
+                }
+
+                for (const [key, property] of Object.entries(schema.properties ?? {})) {
+                    if (
+                        property.type === 'integer' &&
+                        key in data &&
+                        !Number.isInteger(data[key])
+                    ) {
+                        errors.push({
+                            instancePath: `/${key}`,
+                            keyword: 'type',
+                            params: { type: 'integer' }
+                        });
+                    }
+                }
+
+                validator.errors = errors;
+                return errors.length === 0;
+            }) as ((data: Record<string, unknown>) => boolean) & { errors?: unknown[] };
+
+            validator.errors = [];
+            return validator;
+        }
+    )
 }));
 
 const mockWorkflows: WorkflowDAG[] = [
@@ -26,8 +127,8 @@ const mockWorkflows: WorkflowDAG[] = [
     }
 ];
 
-const mockProfiles: PipelineProfile[] = [
-    {
+function createProfile(overrides: Partial<PipelineProfile> = {}): PipelineProfile {
+    return {
         pipelineName: 'Stage 1',
         pipelineId: 'stage-1',
         pipelineDescription: 'First stage',
@@ -36,81 +137,56 @@ const mockProfiles: PipelineProfile[] = [
         pipelineType: 'workflow',
         parametersSchema: {
             type: 'object',
+            required: ['param1'],
             properties: {
-                param1: { type: 'string', default: 'value1' }
+                param1: { type: 'string', title: 'Parameter 1' }
             }
         },
         submission: {
             encoding: 'cli-string',
             optionsFieldName: 'options'
+        },
+        ...overrides
+    };
+}
+
+async function renderSelectedSubmit(profiles: PipelineProfile[] = [createProfile()]) {
+    vi.mocked(getWorkflowProfiles).mockResolvedValue(profiles);
+
+    render(Submit, {
+        props: {
+            baseUrl: 'https://api.example.test'
         }
-    }
-];
+    });
+
+    const select = await screen.findByLabelText('Select workflow');
+    await waitFor(() => expect(select).not.toBeDisabled());
+    await fireEvent.change(select, { target: { value: 'test-workflow' } });
+
+    await waitFor(() => {
+        expect(getWorkflowProfiles).toHaveBeenCalledWith(
+            'https://api.example.test',
+            'test-workflow'
+        );
+    });
+
+    return { select };
+}
 
 describe('Submit.svelte', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(getWorkflows).mockResolvedValue(mockWorkflows);
-        vi.mocked(getWorkflowProfiles).mockResolvedValue(mockProfiles);
-        vi.mocked(axios.post).mockResolvedValue({ data: {} });
     });
 
-    it('loads workflows and shows workflow selection', async () => {
-        render(Submit, {
-            props: {
-                baseUrl: 'https://api.example.test'
-            }
-        });
+    it('loads workflows and fetches profiles for the selected workflow', async () => {
+        const { select } = await renderSelectedSubmit();
 
-        await waitFor(() => {
-            expect(screen.getByLabelText('Select workflow')).toBeInTheDocument();
-        });
-
-        expect(screen.getByText('Test Workflow')).toBeInTheDocument();
+        expect(select).toHaveValue('test-workflow');
+        expect(await screen.findByLabelText('Parameter 1')).toBeInTheDocument();
     });
 
-    it('fetches workflow profiles when a workflow is selected', async () => {
-        render(Submit, {
-            props: {
-                baseUrl: 'https://api.example.test'
-            }
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('Test Workflow')).toBeInTheDocument();
-        });
-
-        const select = screen.getByLabelText('Select workflow');
-        await fireEvent.change(select, { target: { value: 'test-workflow' } });
-
-        await waitFor(() => {
-            expect(getWorkflowProfiles).toHaveBeenCalledWith(
-                'https://api.example.test',
-                'test-workflow'
-            );
-        });
-    });
-
-    it('shows workflow stages when profiles are loaded', async () => {
-        render(Submit, {
-            props: {
-                baseUrl: 'https://api.example.test'
-            }
-        });
-
-        await waitFor(() => {
-            expect(screen.getByText('Test Workflow')).toBeInTheDocument();
-        });
-
-        const select = screen.getByLabelText('Select workflow');
-        await fireEvent.change(select, { target: { value: 'test-workflow' } });
-
-        await waitFor(() => {
-            expect(screen.getByText(/Stage 1: Stage 1/)).toBeInTheDocument();
-        });
-    });
-
-    it('submit button is disabled when no workflow is selected', async () => {
+    it('keeps submit disabled until profiles are loaded', async () => {
         render(Submit, {
             props: {
                 baseUrl: 'https://api.example.test'
@@ -121,10 +197,94 @@ describe('Submit.svelte', () => {
         expect(submitButton).toBeDisabled();
     });
 
-    it('shows submission preview without actually submitting', async () => {
-        // Mock window.alert
+    it('blocks preview when required data is missing and clears field errors on edit', async () => {
         const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-        const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        await renderSelectedSubmit();
+
+        const submitButton = screen.getByRole('button', { name: 'Submit Workflow' });
+        await fireEvent.click(submitButton);
+
+        const field = screen.getByLabelText('Parameter 1');
+        await waitFor(() => expect(field).toHaveAttribute('aria-invalid', 'true'));
+        expect(alertSpy).not.toHaveBeenCalled();
+
+        await fireEvent.input(field, { target: { value: 'value1' } });
+        expect(field).toHaveAttribute('aria-invalid', 'false');
+
+        alertSpy.mockRestore();
+    });
+
+    it('previews an ordered array payload without making a network submission', async () => {
+        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        await renderSelectedSubmit([
+            createProfile({
+                pipelineId: 'stage-1',
+                parametersSchema: {
+                    type: 'object',
+                    properties: {
+                        param1: { type: 'string', default: 'first' }
+                    }
+                }
+            }),
+            createProfile({
+                pipelineName: 'Stage 2',
+                pipelineId: 'stage-2',
+                parametersSchema: {
+                    type: 'object',
+                    properties: {
+                        param2: { type: 'string', default: 'second' }
+                    }
+                }
+            })
+        ]);
+
+        await fireEvent.click(screen.getByRole('button', { name: 'Submit Workflow' }));
+
+        expect(alertSpy).toHaveBeenCalledOnce();
+        const alertMessage = String(alertSpy.mock.calls[0][0]);
+        const payload = JSON.parse(alertMessage.slice(alertMessage.indexOf('[\n')));
+
+        expect(Array.isArray(payload)).toBe(true);
+        expect(payload).toHaveLength(2);
+        expect(payload.map((stage: { options: string }) => stage.options)).toEqual([
+            'param1 first',
+            'param2 second'
+        ]);
+
+        alertSpy.mockRestore();
+    });
+
+    it('ignores stale profile responses after workflow selection changes', async () => {
+        const workflows: WorkflowDAG[] = [
+            ...mockWorkflows,
+            {
+                dag_id: 'second-workflow',
+                dag_display_name: 'Second Workflow',
+                description: 'Second workflow description',
+                is_paused: false
+            }
+        ];
+        vi.mocked(getWorkflows).mockResolvedValue(workflows);
+
+        let resolveFirst: (profiles: PipelineProfile[]) => void = () => {};
+        const firstProfiles = new Promise<PipelineProfile[]>((resolve) => {
+            resolveFirst = resolve;
+        });
+
+        vi.mocked(getWorkflowProfiles)
+            .mockReturnValueOnce(firstProfiles)
+            .mockResolvedValueOnce([
+                createProfile({
+                    pipelineName: 'Second Stage',
+                    pipelineId: 'second-stage',
+                    parametersSchema: {
+                        type: 'object',
+                        properties: {
+                            secondParam: { type: 'string', title: 'Second Parameter' }
+                        }
+                    }
+                })
+            ]);
 
         render(Submit, {
             props: {
@@ -132,33 +292,23 @@ describe('Submit.svelte', () => {
             }
         });
 
-        await waitFor(() => {
-            expect(screen.getByText('Test Workflow')).toBeInTheDocument();
-        });
-
-        const select = screen.getByLabelText('Select workflow');
+        const select = await screen.findByLabelText('Select workflow');
+        await waitFor(() => expect(select).not.toBeDisabled());
         await fireEvent.change(select, { target: { value: 'test-workflow' } });
+        await fireEvent.change(select, { target: { value: 'second-workflow' } });
 
-        await waitFor(() => {
-            expect(screen.getByText(/Stage 1: Stage 1/)).toBeInTheDocument();
-        });
+        resolveFirst([createProfile()]);
 
-        const submitButton = screen.getByRole('button', { name: 'Submit Workflow' });
-        await fireEvent.click(submitButton);
+        expect(await screen.findByLabelText('Second Parameter')).toBeInTheDocument();
+        expect(screen.queryByLabelText('Parameter 1')).not.toBeInTheDocument();
+    });
 
-        await waitFor(() => {
-            // Should show alert with API call details
-            expect(alertSpy).toHaveBeenCalled();
-            const alertMessage = alertSpy.mock.calls[0][0];
-            expect(alertMessage).toContain('Would POST to:');
-            expect(alertMessage).toContain('/workflows/trigger?dagId=test-workflow');
-            expect(alertMessage).toContain('array format');
-        });
+    it('adds stable form identifiers to generated controls', async () => {
+        await renderSelectedSubmit();
 
-        // Should NOT actually call axios.post
-        expect(axios.post).not.toHaveBeenCalled();
+        const field = await screen.findByLabelText('Parameter 1');
 
-        alertSpy.mockRestore();
-        consoleSpy.mockRestore();
+        expect(field).toHaveAttribute('id');
+        expect(field).toHaveAttribute('name', 'param1');
     });
 });

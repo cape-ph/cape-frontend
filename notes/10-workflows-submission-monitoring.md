@@ -32,49 +32,41 @@
 
 - `dagId` (required): Workflow identifier (e.g., `bactopia_and_kraken2_v3_2_0`)
 
-**Request Body**: JSON object with **one key per pipeline in the workflow**
+**Request Body**: JSON array with one compiled Nextflow options object per pipeline
+profile returned by `/workflows/pipelineprofiles`
 
 ```typescript
-interface WorkflowTriggerRequest {
-    [pipelineId: string]: {
-        // Pipeline-specific parameters (from parametersSchema)
-        [paramName: string]: string | number | boolean;
-
-        // Special fields for pipeline configuration
-        nextflowOptions?: string; // CLI-encoded parameters
-        pipelineOutputBucket?: string; // S3 bucket for output
-        pipelineOutputPrefix?: string; // S3 prefix for output
-        pipelineOutputBucketName?: string; // Alternative bucket field name
-    };
-}
+type WorkflowTriggerRequest = Array<Record<string, unknown>>;
 ```
 
 **Example Request** (Bactopia + Kraken2 workflow):
 
 ```json
-{
-    "bactopia": {
-        "--sample": "airflow-sample",
-        "nextflowOptions": "-profile aws --max_cpus 2 --max_memory 24.GB --ont s3://...",
+[
+    {
+        "nextflowOptions": "-profile aws --max_cpus 2 --max_memory 24.GB --sample airflow-sample --ont s3://...",
         "pipelineOutputBucket": "s3://cape-demo-files",
         "pipelineOutputPrefix": "from-airflow"
     },
-    "kraken2": {
+    {
         "pipelineOutputBucketName": "cape-demo-files",
         "pipelineOutputPrefix": "from-airflow",
         "nextflowOptions": "-profile aws --max_cpus 2 --max_memory 8.GB"
     }
-}
+]
 ```
 
 **Key Observations**:
 
-1. **Top-level keys match pipeline IDs**: `"bactopia"` and `"kraken2"` (NOT `pipelineId` values like `"bactopia-ont-v3.2.0"`)
-2. **Mixed parameter encoding**:
-    - Some parameters as direct JSON fields (`"--sample": "airflow-sample"`)
-    - Some parameters in `nextflowOptions` string (`"-profile aws --max_cpus 2..."`)
-3. **Output configuration per pipeline**: Each pipeline stage can have different output locations
-4. **Parameter name inconsistency**:
+1. **Array order is stage identity**: item `0` configures the first pipeline profile,
+   item `1` configures the second, and so on.
+2. **Do not key by pipeline name or ID**: workflows may use the same pipeline more than
+   once, so keyed objects can collapse distinct stages.
+3. **Mixed parameter encoding may still appear inside each stage object**:
+    - Parameters may be compiled into `nextflowOptions`
+    - Stage schemas may also expose direct output fields
+4. **Output configuration per pipeline**: Each pipeline stage can have different output locations
+5. **Parameter name inconsistency**:
     - Bactopia uses `pipelineOutputBucket`
     - Kraken2 uses `pipelineOutputBucketName`
 
@@ -307,7 +299,7 @@ interface HaltRequest {
 
 ## Comparison: Single Pipeline vs Workflow Submission
 
-### Current Submit Page (`/dap/submit`)
+### Previous Single-Pipeline Submit Page (`/dap/submit`)
 
 **Request**:
 
@@ -324,24 +316,23 @@ interface HaltRequest {
 
 ---
 
-### New Workflow Submission (`/workflows/trigger`)
+### Workflow Submission (`/workflows/trigger`)
 
 **Request**:
 
 ```json
-{
-    "bactopia": {
-        "--sample": "test",
-        "nextflowOptions": "--ont s3://...",
+[
+    {
+        "nextflowOptions": "--sample test --ont s3://...",
         "pipelineOutputBucket": "s3://bucket",
         "pipelineOutputPrefix": "path"
     },
-    "kraken2": {
+    {
         "nextflowOptions": "--max_cpus 2",
         "pipelineOutputBucketName": "s3://bucket",
         "pipelineOutputPrefix": "path"
     }
-}
+]
 ```
 
 **Multiple forms** (one per stage) → **Single workflow submission** → **Tracking via `dag_run_id`**
@@ -425,15 +416,16 @@ Store `dag_run_id` + user metadata in database for:
 
 ## Minimal Feature Parity Requirements
 
-To match current Submit page functionality:
+To move from the current preview-only Submit page to active workflow submission:
 
 ### Must Have
 
 ✅ Select workflow (instead of pipeline)
 ✅ Fetch pipeline profiles for all stages
 ✅ Render forms for each pipeline stage
-✅ Submit workflow with parameters
-✅ Show success toast with confirmation
+✅ Build ordered array payload from stage parameters
+✅ POST workflow payload to `/workflows/trigger`
+✅ Show success toast with confirmation and returned `dag_run_id`
 
 ### Nice to Have (Not Feature Parity)
 
@@ -445,7 +437,7 @@ To match current Submit page functionality:
 
 ---
 
-## Implementation Plan for Feature Parity
+## Implementation Plan for Active Submission
 
 ### Phase 1: Workflow Selection & Form Generation
 
@@ -455,10 +447,10 @@ To match current Submit page functionality:
 4. Generate **multiple forms** from array of pipeline profiles
 5. Manage state for multiple parameter sets
 
-### Phase 2: Submission
+### Phase 2: Active Submission
 
-1. Build request body with pipeline IDs as keys
-2. Handle mixed parameter encoding (direct fields + `nextflowOptions`)
+1. Build request body as an array matching the `/workflows/pipelineprofiles` order
+2. Compile each stage object according to its profile submission encoding
 3. POST to `/workflows/trigger?dagId=X`
 4. Display success toast
 5. _(Optional)_ Store `dag_run_id` in localStorage for future status checks
@@ -488,52 +480,28 @@ To match current Submit page functionality:
 ]
 ```
 
-**Problem**: Request body uses **pipeline names** (`"bactopia"`, `"kraken2"`), not pipeline IDs
+**Contract**: Request body uses the same order as the profile array. No pipeline ID to
+request-key mapping is required.
 
-**Solution**: Need mapping from `pipelineId` → request key name
-
-**Observations from Testing**:
-
-- `pipelineId: "bactopia-ont-v3.2.0"` → Request key: `"bactopia"`
-- `pipelineId: "bactopia-kraken2-v3.2.0"` → Request key: `"kraken2"`
-
-**Pattern**: Extract base name before version?
-
-```typescript
-function getPipelineKeyName(pipelineId: string): string {
-    // "bactopia-ont-v3.2.0" → "bactopia"
-    // "bactopia-kraken2-v3.2.0" → "kraken2"
-    // Pattern unclear - may need backend to provide explicit field
-}
-```
-
-**Recommended**: Backend should add `requestKey` field to `PipelineProfile`:
-
-```typescript
-interface PipelineProfile {
-    pipelineId: string;
-    requestKey: string; // NEW: Key to use in trigger request body
-    // ... rest of fields
-}
-```
+**Reason**: A workflow can include the same pipeline more than once in sequence. A keyed
+object would either overwrite duplicate keys or require invented keys that are not part
+of the API contract.
 
 ---
 
 ## Open Questions
 
-1. **Request key mapping**: How to derive `"bactopia"` from `"bactopia-ont-v3.2.0"`? Is there a pattern or should backend provide explicit field?
+1. **Parameter encoding**: Should all parameters go in `nextflowOptions` string, or is mixed encoding (some direct fields + some in string) intentional?
 
-2. **Parameter encoding**: Should all parameters go in `nextflowOptions` string, or is mixed encoding (some direct fields + some in string) intentional?
+2. **Output configuration**: Why different field names (`pipelineOutputBucket` vs `pipelineOutputBucketName`)? Should frontend normalize or preserve differences?
 
-3. **Output configuration**: Why different field names (`pipelineOutputBucket` vs `pipelineOutputBucketName`)? Should frontend normalize or preserve differences?
+3. **UISchema usage**: Should frontend implement JsonForms layout hints from `uiSchema` field, or ignore for MVP?
 
-4. **UISchema usage**: Should frontend implement JsonForms layout hints from `uiSchema` field, or ignore for MVP?
+4. **Parameter dependencies**: How to show Stage 2's `--bactopia` parameter should reference Stage 1's `--outdir` value? Auto-populate or require user to copy-paste?
 
-5. **Parameter dependencies**: How to show Stage 2's `--bactopia` parameter should reference Stage 1's `--outdir` value? Auto-populate or require user to copy-paste?
+5. **Status polling**: What's reasonable polling interval? 5 seconds? 10 seconds? 30 seconds?
 
-6. **Status polling**: What's reasonable polling interval? 5 seconds? 10 seconds? 30 seconds?
-
-7. **Run history limit**: If using localStorage, how many runs to keep? Last 10? Last 50? All time with manual cleanup?
+6. **Run history limit**: If using localStorage, how many runs to keep? Last 10? Last 50? All time with manual cleanup?
 
 ---
 
@@ -543,7 +511,7 @@ interface PipelineProfile {
 
 The API responses provide everything needed to:
 
-- Submit workflows with multiple pipeline stages
+- Preview or submit workflows with multiple pipeline stages
 - Construct proper request body format
 - Understand state transitions
 - Implement status tracking (if desired)
@@ -556,15 +524,15 @@ Can achieve feature parity (submit + success notification) without:
 - Persistent storage
 - Monitoring UI
 
-### For MVP (Feature Parity Only):
+### For Active Submission:
 
 **Implement**:
 
 1. Workflow selection dropdown (from `/workflows`)
 2. Multi-stage form generation (from `/workflows/pipelineprofiles`)
-3. Request body construction per pipeline
+3. Request body construction as an ordered array
 4. Submit to `/workflows/trigger`
-5. Show success toast
+5. Show success toast with `dag_run_id`
 
 **Skip for Now**:
 

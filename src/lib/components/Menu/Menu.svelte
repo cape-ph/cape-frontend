@@ -4,7 +4,7 @@
         links,
         activeKey,
         onSelect,
-        buttonClass = 'text-primary-700 rounded-base hover:preset-tonal'
+        buttonClass = 'text-primary-700 dark:text-primary-200 rounded-base hover:preset-tonal'
     }: {
         links: { key: string; label: string }[];
         activeKey: string;
@@ -43,6 +43,7 @@
             <!-- Mobile toggle -->
             <button
                 class="btn btn-sm preset-ghost md:hidden"
+                aria-label="Toggle navigation menu"
                 aria-expanded={open}
                 aria-controls="mobile-nav"
                 onclick={() => (open = !open)}
@@ -65,8 +66,8 @@
                             type="button"
                             onclick={() => select(item.key)}
                             aria-current={activeKey === item.key ? 'page' : undefined}
-                            class="rounded-base hover:preset-tonal w-full px-3 py-2 text-left text-sm transition
-                     {activeKey === item.key ? 'border-b-2 font-semibold' : 'opacity-90'}"
+                            class="rounded-base hover:preset-tonal w-full px-3 py-2 text-left text-sm text-gray-950 transition dark:text-gray-100
+                     {activeKey === item.key ? 'border-b-2 font-semibold' : ''}"
                         >
                             {item.label}
                         </button>

@@ -4,6 +4,10 @@ Base URL (development): `https://api.cape-dev.org/capi-dev`
 
 ## Pipeline Management
 
+**Current Submit tab note**: the Submit UI now uses workflow endpoints for its primary
+path. The DAP endpoints below remain documented because they are still implemented API
+helpers and may be useful for direct single-pipeline integrations.
+
 ### GET /dap/pipelines
 
 Retrieve list of all available pipelines.
@@ -40,7 +44,8 @@ interface Pipeline {
 ]
 ```
 
-**Used By**: Submit component on mount to populate pipeline dropdown
+**Used By**: `getPipelines()` helper. The current Submit UI uses `GET /workflows`
+instead.
 
 ---
 
@@ -108,7 +113,8 @@ interface PipelineProfile {
 }
 ```
 
-**Used By**: Submit component when user selects pipeline version, to generate form fields
+**Used By**: `getPipelineProfile()` helper. The current Submit UI uses
+`GET /workflows/pipelineprofiles` instead.
 
 ---
 
@@ -159,7 +165,84 @@ interface SubmissionData {
 
 **Response**: Success/error status (exact schema not shown in code, assumed standard REST)
 
-**Used By**: Submit component when user clicks Submit button
+**Used By**: Direct single-pipeline submission integrations. The current Submit UI is
+preview-only for workflow submissions and does not POST to this endpoint.
+
+---
+
+## Workflow Management
+
+### GET /workflows
+
+Retrieve available workflow DAGs for the Submit tab.
+
+**Parameters**: None
+
+**Response**: Object containing a `dags` array.
+
+```typescript
+interface WorkflowDAG {
+    dag_id: string;
+    dag_display_name: string;
+    description: string;
+    is_paused: boolean;
+}
+```
+
+**Used By**: Submit component on mount to populate the workflow dropdown
+
+---
+
+### GET /workflows/pipelineprofiles
+
+Retrieve the ordered pipeline profile list for a workflow.
+
+**Query Parameters**:
+
+- `dagId` (string, required): Workflow DAG identifier
+
+**Response**: `PipelineProfile[]`
+
+The array order is meaningful. The Submit component renders one stage per response
+entry and serializes one options object per entry in the same order.
+
+**Used By**: Submit component after workflow selection to generate stage forms
+
+---
+
+### POST /workflows/trigger
+
+Trigger a workflow run.
+
+**Query Parameters**:
+
+- `dagId` (string, required): Workflow DAG identifier
+
+**Request Body**: ordered array of compiled Nextflow options objects.
+
+```typescript
+type WorkflowTriggerRequest = Array<Record<string, unknown>>;
+```
+
+**Example Request**:
+
+```json
+[
+    {
+        "nextflowOptions": "-profile aws --max_cpus 2 --sample sample-a"
+    },
+    {
+        "nextflowOptions": "-profile aws --max_cpus 2 --bactopia s3://bucket/path"
+    }
+]
+```
+
+Do not convert this payload into an object keyed by pipeline name or pipeline ID. A
+workflow may include the same pipeline more than once, so the positional array contract
+preserves stage identity.
+
+**Used By**: Future workflow execution. The current Submit UI keeps this path
+preview-only and shows the serialized payload in an alert instead of calling the API.
 
 ---
 

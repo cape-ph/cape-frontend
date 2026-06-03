@@ -16,9 +16,9 @@ export const PUBLIC_COGNITO_CLIENT_ID = envar(
     'PUBLIC_COGNITO_CLIENT_ID',
     env.PUBLIC_COGNITO_CLIENT_ID
 );
-export const PUBLIC_CONGNITO_REDIRECT_URI = envar(
-    'PUBLIC_CONGNITO_REDIRECT_URI',
+export const PUBLIC_COGNITO_REDIRECT_URI = envar(
+    'PUBLIC_COGNITO_REDIRECT_URI',
     env.PUBLIC_COGNITO_REDIRECT_URI
 );
 
-export const API_BASE = env.API_BASE ?? 'https://api.cape-dev.org/capi-dev';
+export const PUBLIC_API_BASE = env.PUBLIC_API_BASE ?? 'https://api.cape-dev.org/capi-dev';

@@ -82,60 +82,59 @@
 
 ---
 
-## Workflow 3: Submitting a Pipeline Job
+## Workflow 3: Previewing a Workflow Submission
 
-**Goal**: User submits a bioinformatics pipeline for execution
+**Goal**: User configures a workflow and verifies the ordered trigger payload before
+backend submission is enabled.
 
-**Prerequisites**: User is authenticated, has uploaded data (separate workflow)
+**Prerequisites**: User is authenticated, has uploaded data needed by the selected
+workflow.
 
 **Steps**:
 
 1. User navigates to Submit tab
-2. User sees pipeline selection form with three sections:
-    - **Pipeline** (name, version, output path)
-    - **Parameters** (dynamic, appears after version selected)
-    - **JSON Preview** (read-only preview of submission)
-3. User selects pipeline name from dropdown:
-    - Dropdown populated from API response (e.g., "bactopia", "viral-assembly")
-4. User selects pipeline version from dropdown:
-    - Dropdown populated based on selected pipeline (e.g., "3.1.0", "3.0.1")
-5. User optionally edits output path:
-    - Pre-filled with default: `s3://ccd-dlh-t-seqauto-result-raw-vbkt-s3-1e80821/pipeline-output`
-6. Parameters form appears dynamically:
-    - Form fields generated from pipeline's JSON Schema
-    - Required fields marked with asterisk (\*)
-    - Each field has label, description (if provided), and appropriate input type
-7. User fills in parameters:
+2. User sees workflow selection and a disabled Submit button
+3. User selects a workflow from the dropdown:
+    - Dropdown is populated from `GET /workflows`
+    - Paused workflows are visible but disabled
+4. Frontend clears any previous stage forms immediately and fetches:
+    - `GET /workflows/pipelineprofiles?dagId={dagId}`
+5. Stage forms appear in the same order returned by the API:
+    - One form per pipeline profile
+    - Required fields marked with an asterisk
+    - Readonly system-managed fields shown as inspectable readonly values
+6. User fills in parameters:
     - Text inputs for strings
-    - Number inputs for integers/numbers (with min/max/step constraints)
+    - Text inputs with numeric input mode for integers/numbers so invalid values can be
+      explained by validation
     - Checkboxes for booleans
     - Dropdowns for enum fields
-    - Readonly text for const fields
-8. JSON Preview updates in real-time as user types
-9. User reviews JSON preview to confirm submission looks correct
-10. User clicks "Submit" button
-11. Frontend validates parameters against schema:
-    - ✅ Valid -> Proceed to submission
-    - ❌ Invalid -> Red error toast with validation error details
-12. Validated data POSTed to `/dap/submit`
-13. Blue info toast: "Job submitted"
-14. User can submit another job or navigate away
+    - Readonly fields for `const` values
+7. User optionally expands the advanced preview to inspect the ordered JSON payload
+8. User clicks Submit
+9. Frontend validates every stage against its JSON Schema:
+    - Valid -> Preview-only alert displays the serialized ordered array payload
+    - Invalid -> Inline field errors and stage error counts are shown
+10. User corrects field values; field errors clear as edited
 
-**Success State**: Pipeline job queued for execution on backend infrastructure
+**Success State**: The user sees a preview-only alert containing the exact workflow
+payload that would be sent to `/workflows/trigger?dagId={dagId}`.
 
 **Error States**:
 
-- No pipeline selected -> Submit button disabled, tooltip explains why
-- Pipeline not runnable (`pipelineRunnable: false`) -> Submit button disabled with explanation
-- Validation fails -> Red error toast with field path and constraint violated
-- Submission API error -> Red error toast with error message
+- No workflow selected -> Submit button disabled
+- Workflow paused -> Workflow option disabled
+- Profile fetch fails -> Error toast and no stage forms remain
+- Pipeline not runnable (`pipelineRunnable: false`) -> Submit disabled for that workflow
+- Schema cannot be rendered safely -> Stage error message and submit blocked
+- Validation fails -> Inline field errors plus stage error counts
 
 **Key User Benefits**:
 
-- No need to know pipeline-specific parameters (form is dynamic)
-- Visual confirmation via JSON preview
-- Clear validation errors before submission
-- Can reuse output path across submissions
+- No need to know pipeline-specific parameters because forms come from backend schemas
+- Clear separation between user-editable fields and system-managed readonly fields
+- Advanced preview confirms the ordered payload without making a backend submission
+- Ordered array payload preserves duplicate pipeline stages in a workflow
 
 ---
 
@@ -241,7 +240,7 @@
 3. If server error: Wait a moment, retry upload
 4. Partial upload automatically cleaned up (no manual action needed)
 
-### Error: Pipeline Submission Validation Fails
+### Error: Workflow Preview Validation Fails
 
 **Symptoms**: Red error toast with validation message
 
@@ -284,8 +283,8 @@
 
 ### Feedback Loops
 
-- Immediate validation on form inputs
-- Real-time JSON preview in Submit tab
+- Inline validation feedback on Submit form fields
+- Advanced JSON preview in Submit tab
 - Per-chunk progress in file uploads
 - Clear success/error messages
 

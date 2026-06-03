@@ -35,11 +35,17 @@ describe('FileUpload.svelte', () => {
         });
 
         expect(screen.getByRole('heading', { name: 'File Upload' })).toBeInTheDocument();
-        expect(screen.getByLabelText('Sample ID')).toBeInTheDocument();
-        expect(screen.getByLabelText('Sample Type')).toBeInTheDocument();
-        expect(screen.getByLabelText('Sample Matrix')).toBeInTheDocument();
-        expect(screen.getByLabelText('Sample Collection Location')).toBeInTheDocument();
-        expect(screen.getByLabelText('Sample Collection Date')).toBeInTheDocument();
+        expect(screen.getByLabelText('Sample ID')).toHaveAttribute('name', 'sample-id');
+        expect(screen.getByLabelText('Sample Type')).toHaveAttribute('name', 'sample-type');
+        expect(screen.getByLabelText('Sample Matrix')).toHaveAttribute('name', 'sample-matrix');
+        expect(screen.getByLabelText('Sample Collection Location')).toHaveAttribute(
+            'name',
+            'sample-collection-location'
+        );
+        expect(screen.getByLabelText('Sample Collection Date')).toHaveAttribute(
+            'name',
+            'sample-collection-date'
+        );
         expect(screen.getByRole('button', { name: 'Upload' })).toBeInTheDocument();
     });
 

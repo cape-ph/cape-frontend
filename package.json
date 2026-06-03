@@ -50,6 +50,7 @@
         "vitest": "^3.0.0"
     },
     "dependencies": {
+        "@apidevtools/json-schema-ref-parser": "^15.3.5",
         "ajv": "^8.18.0",
         "axios": "^1.11.0",
         "buffer": "^6.0.3",
