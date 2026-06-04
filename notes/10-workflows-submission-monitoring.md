@@ -2,6 +2,10 @@
 
 **Based on**: Real API responses from testing (see `scratch/workflows-api-testing.md`)
 
+**Update (2026-06-04)**: The submission payload structure has been simplified. The
+frontend now sends `{pipelineId, nextflowOptions}` directly without handling
+`submission.encoding` logic. See updated payload examples in this document.
+
 ---
 
 ## Understanding Workflow Submission & Tracking
@@ -32,11 +36,14 @@
 
 - `dagId` (required): Workflow identifier (e.g., `bactopia_and_kraken2_v3_2_0`)
 
-**Request Body**: JSON array with one compiled Nextflow options object per pipeline
-profile returned by `/workflows/pipelineprofiles`
+**Request Body**: JSON array with one stage object containing `pipelineId` and
+`nextflowOptions` per pipeline profile returned by `/workflows/pipelineprofiles`
 
 ```typescript
-type WorkflowTriggerRequest = Array<Record<string, unknown>>;
+type WorkflowTriggerRequest = Array<{
+    pipelineId: string;
+    nextflowOptions: Record<string, unknown>;
+}>;
 ```
 
 **Example Request** (Bactopia + Kraken2 workflow):
@@ -44,14 +51,22 @@ type WorkflowTriggerRequest = Array<Record<string, unknown>>;
 ```json
 [
     {
-        "nextflowOptions": "-profile aws --max_cpus 2 --max_memory 24.GB --sample airflow-sample --ont s3://...",
-        "pipelineOutputBucket": "s3://cape-demo-files",
-        "pipelineOutputPrefix": "from-airflow"
+        "pipelineId": "bactopia-gather-v3.2.0",
+        "nextflowOptions": {
+            "-profile": "aws",
+            "--max_cpus": 2,
+            "--max_memory": "24.GB",
+            "--sample": "airflow-sample",
+            "--ont": "s3://..."
+        }
     },
     {
-        "pipelineOutputBucketName": "cape-demo-files",
-        "pipelineOutputPrefix": "from-airflow",
-        "nextflowOptions": "-profile aws --max_cpus 2 --max_memory 8.GB"
+        "pipelineId": "bactopia-kraken2-v3.2.0",
+        "nextflowOptions": {
+            "-profile": "aws",
+            "--max_cpus": 2,
+            "--max_memory": "8.GB"
+        }
     }
 ]
 ```
@@ -62,13 +77,8 @@ type WorkflowTriggerRequest = Array<Record<string, unknown>>;
    item `1` configures the second, and so on.
 2. **Do not key by pipeline name or ID**: workflows may use the same pipeline more than
    once, so keyed objects can collapse distinct stages.
-3. **Mixed parameter encoding may still appear inside each stage object**:
-    - Parameters may be compiled into `nextflowOptions`
-    - Stage schemas may also expose direct output fields
-4. **Output configuration per pipeline**: Each pipeline stage can have different output locations
-5. **Parameter name inconsistency**:
-    - Bactopia uses `pipelineOutputBucket`
-    - Kraken2 uses `pipelineOutputBucketName`
+3. **Simple structure**: Each stage contains `pipelineId` for identification and
+   `nextflowOptions` as a typed object (no encoding logic needed)
 
 ### Response Structure
 

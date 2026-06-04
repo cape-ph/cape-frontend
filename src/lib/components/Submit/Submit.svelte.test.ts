@@ -68,12 +68,6 @@ vi.mock('$lib/schema', () => ({
             );
         }
     ),
-    getCliOptionsString: vi.fn((options: Record<string, unknown>) =>
-        Object.entries(options)
-            .filter(([, value]) => value !== undefined && value !== null && value !== '')
-            .map(([key, value]) => `${key} ${String(value)}`)
-            .join(' ')
-    ),
     compile: vi.fn(
         (schema: { required?: string[]; properties?: Record<string, { type?: string }> }) => {
             const validator = ((data: Record<string, unknown>) => {
@@ -246,10 +240,12 @@ describe('Submit.svelte', () => {
 
         expect(Array.isArray(payload)).toBe(true);
         expect(payload).toHaveLength(2);
-        expect(payload.map((stage: { options: string }) => stage.options)).toEqual([
-            'param1 first',
-            'param2 second'
-        ]);
+        expect(
+            payload.map(
+                (stage: { nextflowOptions: Record<string, unknown> }) =>
+                    stage.nextflowOptions.param1 ?? stage.nextflowOptions.param2
+            )
+        ).toEqual(['first', 'second']);
 
         alertSpy.mockRestore();
     });

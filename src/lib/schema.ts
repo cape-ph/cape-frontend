@@ -226,20 +226,3 @@ export function coerceOptionsForValidation(
 
     return typedData;
 }
-
-export function getCliOptionsString(options: Record<string, unknown>): string {
-    return Object.entries(options)
-        .filter(([, value]) => value !== undefined && value !== null && value !== '')
-        .map(([key, value]) => `${key} ${quoteCliValue(value)}`)
-        .join(' ');
-}
-
-function quoteCliValue(value: unknown): string {
-    const stringValue = String(value);
-
-    if (!/[\s"'\\]/.test(stringValue)) {
-        return stringValue;
-    }
-
-    return `'${stringValue.replaceAll("'", "'\\''")}'`;
-}

@@ -3,6 +3,11 @@
 **Date**: 2026-06-02  
 **Purpose**: Understanding workflow endpoints for multi-stage pipeline orchestration
 
+**Update (2026-06-04)**: The backend simplified `/workflows/trigger` to accept
+`{pipelineId, nextflowOptions}` payloads directly. The frontend no longer uses
+`submission.encoding` or `submission.optionsFieldName` fields from the API responses,
+though they still exist in the backend API contract for backward compatibility.
+
 ---
 
 ## Key Discoveries

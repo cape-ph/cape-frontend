@@ -11,13 +11,59 @@
 
 ### Last Updated
 
-2026-06-03 (Submit page review remediation and documentation update)
+2026-06-04 (Strengthened documentation maintenance requirements in AGENTS.md)
 
 ### Active Branch
 
 `19-use-jsonschema-from-pipelineprofile` - JSON Schema-based workflow form generation with validation and review remediation
 
 ### Recent Work Completed
+
+**IMPORTANT**: When making code changes, always update relevant `notes/*.md` documentation
+files in the same commit to prevent contextual drift. See AGENTS.md "Documentation
+Maintenance" section for full guidelines.
+
+#### Strengthened Documentation Requirements (2026-06-04) ✅
+
+- **Problem**: Documentation maintenance section existed in AGENTS.md but was buried at the end and easy to skip
+- **Solution**: 
+    - Moved "Documentation Maintenance" section earlier (right after "Development Workflow")
+    - Added ⚠️ CRITICAL REQUIREMENT header to make it unmissable
+    - Expanded "Pre-Completion Checklist" to explicitly call out documentation requirements
+    - Added "How to Update Documentation" with DO/DON'T guidelines
+    - Added mandatory checklist with grep command examples
+    - Removed duplicate section at end of file
+- **Impact**: Future AI agents (and developers) will see documentation requirements upfront and be reminded in the pre-completion checklist
+- **Files Changed**:
+    - `AGENTS.md`: Restructured documentation section, expanded requirements, made language mandatory
+    - `NOTES.md`: Added this entry and reminder at top of Recent Work
+
+#### Simplified Workflow Submission Payload (2026-06-04) ✅
+
+- **Backend API simplification**:
+    - Backend team simplified `/workflows/:dagId/trigger` endpoint to accept ordered array of `{pipelineId, nextflowOptions}` objects
+    - Removed need for client-side `submission.encoding` handling and `submission.optionsFieldName` resolution
+    - Client now sends straightforward structure: `[{pipelineId: "...", nextflowOptions: {...}}, ...]`
+- **Frontend cleanup**:
+    - **Completely removed** `getCliOptionsString()` and its helper `quoteCliValue()` from `src/lib/schema.ts`
+    - Removed obsolete test for `getCliOptionsString` from `src/lib/schema.test.ts`
+    - Removed mock of `getCliOptionsString` from `Submit.svelte.test.ts`
+    - Simplified `serializeWorkflow()` in `Submit.svelte` to generate payload directly without encoding logic
+- **Documentation updates**:
+    - Updated `notes/03-api-endpoints.md` with new `/workflows/trigger` payload structure
+    - Updated `notes/04-data-types.md` with clarification that `submission` field is legacy
+    - Updated `notes/05-functionality.md` to remove CLI string serialization examples
+    - Updated `notes/08-submit-page-walkthrough.md` with archive notice about removed function
+    - Updated `notes/09-workflows-api-analysis.md` with backend simplification note
+    - Updated `notes/10-workflows-submission-monitoring.md` with new payload examples
+    - Updated `notes/11-workflow-submit-ui-design.md` with correct serialization code
+    - Updated `notes/12-coding-style-guide.md` to remove `getCliOptionsString` examples
+- **Verification**:
+    - All lint, format, and type-check validations pass
+    - All tests pass (21/21)
+    - Browser tested workflow selection and form generation with dev server
+    - Advanced Preview shows correct simplified payload structure
+    - Submit button enables correctly after workflow selection
 
 #### Submit Page Review Remediation (2026-06-03) ✅
 

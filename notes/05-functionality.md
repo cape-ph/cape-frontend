@@ -167,22 +167,21 @@ The form is **not hardcoded**. Instead:
 
 **Serialization**:
 
-Each stage serializes according to `submission.encoding` in that stage profile.
+Each stage generates a payload object containing `pipelineId` and `nextflowOptions`:
 
-1. **CLI String** (`cli-string`):
+```json
+{
+    "pipelineId": "bactopia-gather",
+    "nextflowOptions": {
+        "--genome_size": "5.0",
+        "--min_contig_length": 500
+    }
+}
+```
 
-    ```json
-    { "options": "--genome_size 5.0 --min_contig_length 500" }
-    ```
-
-2. **JSON** (other values):
-    ```json
-    { "parameters": { "--genome_size": "5.0", "--min_contig_length": 500 } }
-    ```
-
-The full workflow trigger payload is an ordered array with one serialized object per
-pipeline profile returned by `/workflows/pipelineprofiles`. It must stay array-shaped
-so workflows that repeat the same pipeline can preserve stage identity.
+The full workflow trigger payload is an ordered array with one object per pipeline profile
+returned by `/workflows/pipelineprofiles`. It must stay array-shaped so workflows that
+repeat the same pipeline can preserve stage identity.
 
 **JSON Preview**:
 
@@ -199,8 +198,7 @@ so workflows that repeat the same pipeline can preserve stage identity.
 
 - `Submit.svelte`: Workflow selection, form rendering, validation orchestration, preview alert
 - `pipeline.ts`: API client and schema helper re-exports
-- `schema.ts`: AJV compile/validate helpers, schema field extraction, default/coercion
-  helpers, and CLI option serialization
+- `schema.ts`: AJV compile/validate helpers, schema field extraction, default/coercion helpers
 
 ---
 

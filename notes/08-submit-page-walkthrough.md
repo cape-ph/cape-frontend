@@ -8,6 +8,11 @@ one stage form per profile, validates with `src/lib/schema.ts`, and keeps
 `/workflows/trigger` preview-only. Treat the detailed trace below as historical context
 until this document is fully rewritten.
 
+**Update (2026-06-04)**: The backend simplified the `/workflows/trigger` endpoint to
+accept `{pipelineId, nextflowOptions}` payloads directly. The frontend no longer uses
+`submission.encoding` or `submission.optionsFieldName` from `PipelineProfile`, and
+`getCliOptionsString()` has been completely removed from `src/lib/schema.ts`.
+
 A detailed trace of the Submit page lifecycle from initial load through form submission.
 
 ---

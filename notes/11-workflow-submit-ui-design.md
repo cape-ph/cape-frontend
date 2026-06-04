@@ -834,7 +834,8 @@ async function onSubmit() {
 
     // Build request body
     const requestBody = profiles.map((profile, index) => ({
-        nextflowOptions: getCliOptionsString(stageOptions[index])
+        pipelineId: profile.pipelineId,
+        nextflowOptions: { ...stageOptions[index] }
     }));
 
     // Submit

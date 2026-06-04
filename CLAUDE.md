@@ -213,7 +213,11 @@ npm run dev -- --open    # Start dev server and open browser automatically
 - [ ] `npm run check` - No type errors
 - [ ] `npm run test` - All tests pass
 - [ ] `npm run dev` - Manually tested changes in browser (for UI work)
-- [ ] Documentation updated (NOTES.md, notes/\*.md if relevant)
+- [ ] **Documentation updated** - **MANDATORY**: See "Documentation Maintenance" section below
+    - [ ] `NOTES.md` updated with work summary
+    - [ ] Relevant `notes/*.md` files updated (see documentation maintenance rules)
+    - [ ] No obsolete information remains in docs
+    - [ ] Examples in docs reflect current implementation
 
 **For UI/component changes**, also verify in dev server:
 
@@ -263,6 +267,119 @@ npm run test:unit
 #    - "Element not found" → Query selector wrong or component not rendering
 #    - "Expected X but got Y" → Logic error in implementation
 ```
+
+---
+
+## Documentation Maintenance
+
+### ⚠️ CRITICAL REQUIREMENT ⚠️
+
+**Documentation is NOT optional. It is part of the implementation.**
+
+When you change code, you MUST update the corresponding documentation in the SAME work session. This is not a suggestion—it is a requirement for marking work as complete.
+
+### Technical Documentation (`notes/` directory)
+
+The `notes/` directory contains comprehensive technical documentation that **MUST be kept in sync** with code changes:
+
+- **01-overview.md** - Project purpose, tech stack, goals, environment
+- **02-architecture.md** - System design, patterns, data flow
+- **03-api-endpoints.md** - Complete API reference with request/response schemas
+- **04-data-types.md** - All TypeScript interfaces and types
+- **05-functionality.md** - Feature explanations and implementation details
+- **06-external-interactions.md** - External systems integration (AWS, APIs, libraries)
+- **07-user-workflows.md** - User interaction flows with success/error states
+- **08-submit-page-walkthrough.md** - Detailed Submit component walkthrough (partially archived)
+- **09-workflows-api-analysis.md** - Workflows API analysis and design decisions
+- **10-workflows-submission-monitoring.md** - Workflow submission and monitoring
+- **11-workflow-submit-ui-design.md** - UI design for workflow submission
+- **12-coding-style-guide.md** - Comprehensive coding style patterns and examples
+
+### When to Update Documentation (MANDATORY)
+
+**You MUST update documentation when you change:**
+
+1. **API Integration**:
+    - New/removed/modified endpoints → Update `03-api-endpoints.md`
+    - Changed request/response schemas → Update `03-api-endpoints.md`
+    - New query parameters or headers → Update `03-api-endpoints.md`
+
+2. **Type Definitions**:
+    - New/modified TypeScript interfaces → Update `04-data-types.md`
+    - Changed field names or types → Update `04-data-types.md`
+    - New constants or utility types → Update `04-data-types.md`
+
+3. **Architecture or Patterns**:
+    - New patterns or design decisions → Update `02-architecture.md`
+    - Changed data flow or component structure → Update `02-architecture.md`
+    - Modified state management approach → Update `02-architecture.md`
+
+4. **Features or Functionality**:
+    - New features or functionality → Update `05-functionality.md`
+    - Modified user-facing behavior → Update `05-functionality.md` and `07-user-workflows.md`
+    - Changed validation or error handling → Update `05-functionality.md`
+
+5. **External Integration**:
+    - New external services or APIs → Update `06-external-interactions.md`
+    - Changed authentication flow → Update `06-external-interactions.md`
+    - Modified library usage → Update `06-external-interactions.md`
+
+6. **User Workflows**:
+    - New user workflows → Update `07-user-workflows.md`
+    - Changed UI interactions → Update `07-user-workflows.md`
+    - Modified error states or recovery paths → Update `07-user-workflows.md`
+
+7. **Environment or Setup**:
+    - New environment variables → Update `01-overview.md`
+    - Changed tech stack or dependencies → Update `01-overview.md`
+    - Modified development setup → Update `01-overview.md`
+
+8. **Code Examples in Documentation**:
+    - When you remove a function (like `getCliOptionsString()`), update ALL docs that reference it
+    - Replace outdated examples with current patterns
+    - Update `12-coding-style-guide.md` if function signatures change
+
+### How to Update Documentation
+
+**DO**:
+- Update docs in the SAME session as code changes
+- Search for references to changed/removed code: `grep -r "functionName" notes/`
+- Update type definitions to match actual implementation
+- Add update notes to archived sections explaining what changed
+- Update `NOTES.md` with summary of documentation changes
+
+**DON'T**:
+- Skip documentation updates "to save time"
+- Leave outdated examples or explanations
+- Assume someone else will update docs later
+- Mark work complete without verifying documentation accuracy
+
+### Documentation Review Checklist (MANDATORY)
+
+Before marking work complete, verify:
+
+- [ ] Code changes are reflected in relevant `notes/*.md` files
+- [ ] Type definitions match between code and `04-data-types.md`
+- [ ] API endpoint documentation matches actual implementation
+- [ ] User workflows are accurate for current UI behavior
+- [ ] No obsolete information remains in docs (old endpoints, removed features)
+- [ ] Examples in docs use current schemas and patterns
+- [ ] Cross-references between doc files are still valid
+- [ ] `NOTES.md` updated with comprehensive work summary
+- [ ] You searched for all references to changed/removed code in `notes/`
+
+### Why This Matters
+
+**Documentation drift is technical debt.** Outdated docs are worse than no docs because they actively mislead future developers and maintainers. Keeping docs synchronized with code:
+
+- Accelerates onboarding for new team members
+- Reduces debugging time (accurate API/type references)
+- Prevents reimplementation of existing features
+- Documents design decisions while context is fresh
+- Enables confident refactoring (clear current state vs. desired state)
+- Prevents wasting time debugging based on incorrect documentation
+
+**If you change code without updating documentation, the work is incomplete.**
 
 ---
 
@@ -584,84 +701,3 @@ Components receive `baseUrl` as props. Current hardcoded value: `https://api.cap
 - **Svelte 5**: This project uses Svelte 5's new reactivity model (runes), not Svelte 4 patterns
 - **Authentication**: The app gates all functionality behind Cognito authentication (`{#if auth.user}`)
 - **Schema-Driven UI**: Pipeline submission forms are dynamically generated from backend JSON schemas, not hardcoded
-
----
-
-## Documentation Maintenance
-
-### Technical Documentation (`notes/` directory)
-
-The `notes/` directory contains comprehensive technical documentation that **MUST be kept in sync** with code changes:
-
-- **01-overview.md** - Project purpose, tech stack, goals, environment
-- **02-architecture.md** - System design, patterns, data flow
-- **03-api-endpoints.md** - Complete API reference with request/response schemas
-- **04-data-types.md** - All TypeScript interfaces and types
-- **05-functionality.md** - Feature explanations and implementation details
-- **06-external-interactions.md** - External systems integration (AWS, APIs, libraries)
-- **07-user-workflows.md** - User interaction flows with success/error states
-
-### When to Update Documentation
-
-**CRITICAL**: Documentation is part of the implementation. Update relevant docs in the same commit/PR as code changes.
-
-Update `notes/` documentation when:
-
-1. **API Changes**:
-    - New/removed/modified endpoints -> Update `03-api-endpoints.md`
-    - Changed request/response schemas -> Update `03-api-endpoints.md`
-    - New query parameters or headers -> Update `03-api-endpoints.md`
-
-2. **Type Changes**:
-    - New/modified TypeScript interfaces -> Update `04-data-types.md`
-    - Changed field names or types -> Update `04-data-types.md`
-    - New constants or utility types -> Update `04-data-types.md`
-
-3. **Architecture Changes**:
-    - New patterns or design decisions -> Update `02-architecture.md`
-    - Changed data flow or component structure -> Update `02-architecture.md`
-    - Modified state management approach -> Update `02-architecture.md`
-
-4. **Feature Changes**:
-    - New features or functionality -> Update `05-functionality.md`
-    - Modified user-facing behavior -> Update `05-functionality.md` and `07-user-workflows.md`
-    - Changed validation or error handling -> Update `05-functionality.md`
-
-5. **External Integration Changes**:
-    - New external services or APIs -> Update `06-external-interactions.md`
-    - Changed authentication flow -> Update `06-external-interactions.md`
-    - Modified library usage -> Update `06-external-interactions.md`
-
-6. **User Flow Changes**:
-    - New user workflows -> Update `07-user-workflows.md`
-    - Changed UI interactions -> Update `07-user-workflows.md`
-    - Modified error states or recovery paths -> Update `07-user-workflows.md`
-
-7. **Environment Changes**:
-    - New environment variables -> Update `01-overview.md`
-    - Changed tech stack or dependencies -> Update `01-overview.md`
-    - Modified development setup -> Update `01-overview.md`
-
-### Documentation Review Checklist
-
-Before marking work complete, verify:
-
-- [ ] Code changes are reflected in relevant `notes/*.md` files
-- [ ] Type definitions match between code and `04-data-types.md`
-- [ ] API endpoint documentation matches actual implementation
-- [ ] User workflows are accurate for current UI behavior
-- [ ] No obsolete information remains in docs (old endpoints, removed features)
-- [ ] Examples in docs use current schemas and patterns
-- [ ] Cross-references between doc files are still valid
-
-### Why This Matters
-
-**Documentation drift is technical debt.** Outdated docs are worse than no docs because they actively mislead future developers and maintainers. Keeping docs synchronized with code:
-
-- Accelerates onboarding for new team members
-- Reduces debugging time (accurate API/type references)
-- Prevents reimplementation of existing features
-- Documents design decisions while context is fresh
-- Enables confident refactoring (clear current state vs. desired state)
-
-**Treat documentation updates as non-optional** when changing implementations they describe.

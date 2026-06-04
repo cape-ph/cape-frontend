@@ -218,10 +218,13 @@ Trigger a workflow run.
 
 - `dagId` (string, required): Workflow DAG identifier
 
-**Request Body**: ordered array of compiled Nextflow options objects.
+**Request Body**: ordered array of stage objects containing `pipelineId` and `nextflowOptions`.
 
 ```typescript
-type WorkflowTriggerRequest = Array<Record<string, unknown>>;
+type WorkflowTriggerRequest = Array<{
+    pipelineId: string;
+    nextflowOptions: Record<string, unknown>;
+}>;
 ```
 
 **Example Request**:
@@ -229,10 +232,20 @@ type WorkflowTriggerRequest = Array<Record<string, unknown>>;
 ```json
 [
     {
-        "nextflowOptions": "-profile aws --max_cpus 2 --sample sample-a"
+        "pipelineId": "bactopia-gather",
+        "nextflowOptions": {
+            "--max_cpus": 2,
+            "-profile": "aws",
+            "--sample": "sample-a"
+        }
     },
     {
-        "nextflowOptions": "-profile aws --max_cpus 2 --bactopia s3://bucket/path"
+        "pipelineId": "bactopia-main",
+        "nextflowOptions": {
+            "--max_cpus": 2,
+            "-profile": "aws",
+            "--bactopia": "s3://bucket/path"
+        }
     }
 ]
 ```

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
     UnsupportedSchemaError,
     coerceOptionsForValidation,
-    getCliOptionsString,
     getDefaultOptions,
     getParameterFields
 } from './schema';
@@ -130,18 +129,5 @@ describe('schema utilities', () => {
             '--max_cpus': 8,
             '-profile': 'aws'
         });
-    });
-
-    it('serializes CLI options in insertion order and quotes shell-sensitive values', () => {
-        const cliOptions = getCliOptionsString({
-            '--outdir': 's3://bucket/path with spaces',
-            '--max_cpus': 8,
-            '--empty': '',
-            '-profile': 'aws'
-        });
-
-        expect(cliOptions).toBe(
-            "--outdir 's3://bucket/path with spaces' --max_cpus 8 -profile aws"
-        );
     });
 });

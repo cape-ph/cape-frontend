@@ -56,8 +56,8 @@ interface PipelineProfile {
     pipelineDescription: string;
     project: string;
     submission: {
-        encoding: string; // "cli-string" or "json"
-        optionsFieldName: string; // Field name for params in submission
+        encoding: string; // Legacy: "cli-string" or "json" - not used by current frontend
+        optionsFieldName: string; // Legacy: field name - not used by current frontend
     };
     pipelineType: string;
     version: string;
@@ -67,6 +67,10 @@ interface PipelineProfile {
 ```
 
 **Used In**: Form generation, parameter validation
+
+**Note**: The `submission` field is a legacy API contract. The current frontend workflow
+submission generates `{pipelineId, nextflowOptions}` payloads directly without using
+`submission.encoding` or `submission.optionsFieldName`.
 
 ---
 
@@ -89,11 +93,14 @@ interface WorkflowDAG {
 
 ### WorkflowTriggerRequest
 
-Ordered workflow trigger payload. Each array item is the compiled Nextflow options
-object for one pipeline profile returned by `/workflows/pipelineprofiles`.
+Ordered workflow trigger payload. Each array item contains the pipeline ID and compiled
+Nextflow options object for one pipeline profile returned by `/workflows/pipelineprofiles`.
 
 ```typescript
-type WorkflowTriggerRequest = Array<Record<string, unknown>>;
+type WorkflowTriggerRequest = Array<{
+    pipelineId: string;
+    nextflowOptions: Record<string, unknown>;
+}>;
 ```
 
 The array order must match the pipeline profile response order. This avoids ambiguity

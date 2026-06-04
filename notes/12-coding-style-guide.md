@@ -219,7 +219,7 @@ let user = $state(undefined); // Type is 'undefined', not 'User | undefined'
 **Function return types** - optional but recommended for public functions:
 
 ```typescript
-function getCliOptionsString(options: Record<string, unknown>): string {
+function getDefaultOptions(schema: unknown): Record<string, unknown> {
     // ...
 }
 ```
@@ -281,7 +281,7 @@ async function onUpload() {}
 **Utility functions**: Verb phrases
 
 ```typescript
-function getCliOptionsString(options: Record<string, unknown>): string {}
+function serializeWorkflow(): unknown[] {}
 function setOption(key: string, value: unknown) {}
 function validateField(field: ParameterField): boolean {}
 ```
@@ -541,7 +541,7 @@ const result = parse(data);
 /**
  * Multi-line JSDoc for exported functions
  */
-export function getCliOptionsString(options: Record<string, unknown>): string {
+export function getDefaultOptions(schema: unknown): Record<string, unknown> {
     // Implementation
 }
 ```

@@ -4,7 +4,6 @@
     import {
         coerceOptionsForValidation,
         compile,
-        getCliOptionsString,
         getDefaultOptions,
         getParameterFields
     } from '$lib/schema';
@@ -345,15 +344,13 @@
         const payloadArray: Record<string, unknown>[] = [];
 
         for (const prof of workflowProfiles ?? []) {
-            const stageOptions = workflowOptions[prof.pipelineId ?? prof.pipelineName] ?? {};
+            const stageId = prof.pipelineId ?? prof.pipelineName;
+            const stageOptions = workflowOptions[stageId] ?? {};
 
-            const stageData: Record<string, unknown> = {};
-
-            if (prof.submission.encoding === 'cli-string') {
-                stageData[prof.submission.optionsFieldName] = getCliOptionsString(stageOptions);
-            } else if (prof.submission.optionsFieldName) {
-                stageData[prof.submission.optionsFieldName] = { ...stageOptions };
-            }
+            const stageData: Record<string, unknown> = {
+                pipelineId: prof.pipelineId,
+                nextflowOptions: { ...stageOptions }
+            };
 
             payloadArray.push(stageData);
         }
