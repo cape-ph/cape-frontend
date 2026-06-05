@@ -13,7 +13,7 @@
     import { onMount, untrack } from 'svelte';
     import { SvelteMap } from 'svelte/reactivity';
     import axios from 'axios';
-    import { addWorkflowRun } from '$lib/workflowRunsStorage';
+    import { addWorkflowRun, type SubmissionConfig } from '$lib/workflowRunsStorage';
     import { addStoredRun } from '$lib/workflowRuns.svelte';
 
     let { baseUrl, onNavigateToDetail } = $props<{
@@ -387,11 +387,28 @@
             const response = await axios.post(endpoint, payload);
             const { dag_run_id: dagRunId, dag_id: dagId } = response.data;
 
+            // Build submission config for storage
+            const submissionConfig: SubmissionConfig = {
+                workflowName: selectedWorkflow?.dag_display_name ?? dagId,
+                stages: (workflowProfiles ?? []).map((profile) => {
+                    // Use same stageId derivation as the rest of the component
+                    const stageId = profile.pipelineId ?? profile.pipelineName;
+                    return {
+                        stageId,
+                        stageName: `${profile.pipelineName} ${profile.version}`,
+                        pipelineName: profile.pipelineName,
+                        pipelineVersion: profile.version,
+                        options: workflowOptions[stageId] ?? {}
+                    };
+                })
+            };
+
             // Store workflow run for status tracking
             const storedRun = {
                 dagId,
                 dagRunId,
-                submittedAt: new Date().toISOString()
+                submittedAt: new Date().toISOString(),
+                submissionConfig
             };
             addWorkflowRun(storedRun);
             addStoredRun(storedRun);

@@ -1,4 +1,19 @@
 /**
+ * Submission configuration for a workflow run
+ * Stored for display in detail view
+ */
+export interface SubmissionConfig {
+    workflowName: string; // Human-readable workflow name
+    stages: {
+        stageId: string; // e.g., "bactopia_v3_2_0"
+        stageName: string; // Human-readable stage name
+        pipelineName: string; // e.g., "Bactopia"
+        pipelineVersion: string; // e.g., "v3.2.0"
+        options: Record<string, unknown>; // Parameter values
+    }[];
+}
+
+/**
  * Stored workflow run information
  * Minimal data stored in cookies - most details fetched from API
  */
@@ -6,6 +21,7 @@ export interface StoredWorkflowRun {
     dagId: string;
     dagRunId: string;
     submittedAt: string; // ISO 8601 timestamp
+    submissionConfig?: SubmissionConfig; // Optional submission configuration
 }
 
 const COOKIE_NAME = 'workflow_runs';
@@ -45,6 +61,7 @@ export function getStoredWorkflowRuns(): StoredWorkflowRun[] {
                 typeof run.dagId === 'string' &&
                 typeof run.dagRunId === 'string' &&
                 typeof run.submittedAt === 'string'
+            // submissionConfig is optional, no validation needed for backward compat
         );
     } catch {
         return [];

@@ -190,6 +190,148 @@ Maintenance" section for full guidelines.
         - "Submit" button label is concise ✅
 - **Status**: Browser history navigation complete and production-ready ✅
 
+#### Workflow Submission Configuration Display (2026-06-05) ✅
+
+- **Goal**: Display the exact parameters used when submitting a workflow in the detail view, so users can review what configuration was used
+- **UX rationale**: Users need to see what parameters were submitted, especially after workflow completes or fails, to understand what configuration was used
+- **Implementation approach**:
+    1. **Extend storage to include submission config**:
+        - Added `SubmissionConfig` type to `workflowRunsStorage.ts`
+        - Contains workflow name and array of stages with their options
+        - Each stage includes: stageId, stageName, pipelineName, pipelineVersion, options
+        - Added as optional `submissionConfig` field on `StoredWorkflowRun`
+    2. **Capture config during submission** (`Submit.svelte`):
+        - Build `SubmissionConfig` object from workflow and profile data
+        - Extract stage information from `workflowProfiles` array
+        - Copy options from `workflowOptions` state
+        - Store in cookie alongside dagId, dagRunId, submittedAt
+    3. **Display config in detail view** (`StatusDetail.svelte`):
+        - Load stored runs from cookie on mount
+        - Match by dagId and dagRunId
+        - Display "Workflow Submission Details" section at bottom of page
+        - Use accordion style matching Submit page (same design language)
+        - Each stage is a collapsible `<details>` element with chevron icon
+        - Shows stage number, name, and parameter count
+        - Parameters displayed in read-only format (grey background, monospace font)
+- **Visual design**:
+    - Section title: "Workflow Submission Details"
+    - Overview text shows total stage count
+    - Each stage minimized by default (can expand to see parameters)
+    - Accordion chevron rotates when expanded (same CSS as Submit page)
+    - Parameters shown as key-value pairs in monospace font
+    - Objects/arrays displayed as JSON strings
+    - Clean separation from task instances table above
+- **Benefits**:
+    - Users can review submission configuration after workflow completes
+    - Helpful for debugging failed workflows (see exact parameters used)
+    - Provides audit trail of submitted configurations
+    - No need to remember what was submitted
+    - Matches Submit page UI for consistency
+- **Validation**:
+    - `npm run format` ✅
+    - `npm run lint` ✅
+    - `npm run check` ✅ (zero errors)
+    - Implementation verified: accordion styling matches Submit page ✅
+- **Limitations**:
+    - Only workflows submitted after this change have submission config
+    - Old workflows won't show "Workflow Submission Details" section
+    - Cookie storage has size limits (works for normal workflows, might fail for huge configs)
+- **Status**: Workflow submission configuration display complete and production-ready ✅
+
+#### Bug Fix: Empty Workflow Submission Details (2026-06-05) ✅
+
+- **Problem**: After submitting a workflow, the detail view showed "Workflow Submission Details" section but with empty stages (no parameter values)
+- **Root cause**: `stageId` mismatch between storing options and retrieving them
+    - When setting options: `stageId = profile.pipelineId ?? profile.pipelineName`
+    - When retrieving for storage: `stageId = "${profile.pipelineName}_${profile.version}".replace(...)` (custom derived string)
+    - These didn't match, so `workflowOptions[stageId]` always returned `undefined`
+- **Investigation**:
+    - Cookie storage was working correctly (verified `submissionConfig` present in cookie)
+    - Display logic was correct (accordion rendering properly)
+    - Issue was in `Submit.svelte` line 395-397: wrong `stageId` derivation
+- **Fix**: Changed submission config builder to use same `stageId` derivation as rest of component
+    - Changed from: `const stageId = "${profile.pipelineName}_${profile.version}".replace(...)`
+    - Changed to: `const stageId = profile.pipelineId ?? profile.pipelineName`
+    - Now matches the keys in `workflowOptions` state
+- **Impact**: Users can now see the actual parameters they submitted when viewing workflow details
+- **Validation**:
+    - `npm run format` ✅
+    - `npm run lint` ✅
+    - `npm run check` ✅ (zero errors)
+    - Verified cookie contains `submissionConfig` with populated `options` objects ✅
+- **Status**: Bug fixed and production-ready ✅
+
+#### Detail View Refresh Button and Auto-Refresh Interval Update (2026-06-05) ✅
+
+- **Goal**: Add manual refresh button to detail view matching the list view design, update auto-refresh to 30 seconds, and show auto-refresh indicator
+- **UX rationale**: Users should have consistent refresh controls across list and detail views, with clear indication of auto-refresh behavior
+- **Changes made** (`StatusDetail.svelte`):
+    1. **Added `isRefreshing` state**: Tracks refresh state for both manual and auto refresh
+    2. **Changed auto-refresh interval**: From 5 seconds to 30 seconds (matches list view)
+    3. **Updated `fetchData()` function**: Sets `isRefreshing` state before/after fetch
+    4. **Added `handleManualRefresh()` function**: Calls `fetchData()` when user clicks refresh
+    5. **Added manual refresh button**:
+        - Grey bubble design matching list view
+        - Positioned left of Halt/Clear button in header
+        - Shows "Refresh" when idle, "Refreshing..." when loading
+        - Icon animates with spin during refresh
+        - Button disabled during refresh (prevents concurrent requests)
+    6. **Added auto-refresh text**: Shows "Automatically refreshes every 30 seconds while running" for running/queued workflows
+- **Visual design**:
+    - Refresh button matches list view style (same grey background, padding, hover states)
+    - Icon spins during both manual and automatic refresh
+    - Button text changes to "Refreshing..." with disabled state
+    - Auto-refresh text appears as subtitle below workflow title
+    - Only shows auto-refresh text for running/queued workflows (completed workflows show Run ID instead)
+- **Benefits**:
+    - Consistent UX across list and detail views
+    - Users can manually trigger refresh without waiting for auto-refresh
+    - Clear visual feedback for refresh state
+    - Less aggressive auto-refresh (30s instead of 5s)
+    - Prevents accidental double-refreshes with disabled state
+- **Validation**:
+    - `npm run format` ✅
+    - `npm run lint` ✅
+    - `npm run check` ✅ (zero errors)
+    - Browser testing:
+        - Refresh button visible in detail view ✅
+        - Button shows "Refreshing..." and spins during refresh ✅
+        - Button disabled during refresh ✅
+        - Button re-enables after refresh completes ✅
+        - Auto-refresh text shows "every 30 seconds while running" ✅
+        - Auto-refresh triggers every 30 seconds ✅
+- **Status**: Detail view refresh enhancements complete and production-ready ✅
+
+#### Simplified Detail View Header (2026-06-05) ✅
+
+- **Goal**: Remove redundant large heading from detail view and add compact auto-refresh indicator
+- **Problem**: Detail view had large redundant h2 heading showing workflow name (e.g., "bactopia_kraken2_v3_2_0") that duplicated the card title below, wasting vertical space
+- **Solution**: Removed redundant heading section (lines 207-220) and added compact "Auto-refreshes every 30s" indicator to the right of Back button
+- **Changes made** (`StatusDetail.svelte`):
+    - Removed entire heading block with workflow name and subtitle
+    - Added small text indicator: "Auto-refreshes every 30s"
+    - Positioned indicator to left of refresh button in header
+    - Only shows for running/queued workflows (hidden for completed workflows)
+    - Uses text-xs with gray color for subtle appearance
+- **Visual result**:
+    - Clean header with just: Back button | "Auto-refreshes every 30s" | Refresh button | Halt button
+    - Workflow name appears once in the card (not twice)
+    - Much more vertical space for actual workflow data
+    - Compact auto-refresh indicator provides context without dominating
+- **Benefits**:
+    - Eliminates redundant information (workflow name was shown twice)
+    - More screen real estate for task instances table
+    - Cleaner, more focused UI
+    - Auto-refresh behavior still communicated clearly with compact text
+- **Validation**:
+    - `npm run lint` ✅
+    - Browser testing:
+        - Redundant heading removed ✅
+        - Compact "Auto-refreshes every 30s" indicator visible ✅
+        - Indicator only shows for running/queued workflows ✅
+        - Workflow name appears once in card (not duplicated) ✅
+- **Status**: Simplified detail view header complete and production-ready ✅
+
 #### Workflow Status Monitoring Implementation (2026-06-05) ✅
 
 - **Goal**: Build complete workflow status tracking system for users to monitor submitted workflows

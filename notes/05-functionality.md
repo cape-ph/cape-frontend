@@ -104,116 +104,135 @@
 
 ---
 
-### 3. Workflow Submission Preview
+### 3. Workflow Submission and Monitoring
 
-**What**: Preview workflow trigger payloads with dynamically generated parameter forms
-for each pipeline stage.
+**What**: Submit workflows and monitor their execution status in real-time
 
 **User Workflow**:
 
-1. Navigate to Submit tab
-2. Select workflow from dropdown
-3. Frontend fetches the ordered pipeline profile list for that workflow
-4. One stage form appears for each pipeline profile
-5. Fill in required/optional parameters for each stage
-6. Review the advanced JSON preview when needed
-7. Click Submit to validate and display the preview-only payload alert
+1. Navigate to Workflows tab
+2. Click "Submit" button to open submission form
+3. Select workflow from dropdown (e.g., "Bactopia v3.2.0 and Kraken2")
+4. Workflow profiles load automatically
+5. Fill in required parameters for each stage (accordion UI)
+6. Click "Submit Workflow" button
+7. Automatically navigated to detail view of running workflow
+8. Monitor progress via task instances table
+9. Use "Back to workflow list" to see all submitted workflows
 
-**Schema-Driven Form Generation**:
+**Workflow List View**:
 
-The form is **not hardcoded**. Instead:
+- Shows all submitted workflows (stored in browser cookie, 90-day retention)
+- Each card displays:
+    - Workflow name
+    - Submission timestamp
+    - Current state badge (running/success/failed)
+    - Task progress (e.g., "✓ 2 / 5" with tri-color progress bar)
+- Auto-refreshes every 30 seconds while workflows are running
+- Manual refresh button available
+- "View details" button navigates to detail view
+- "Submit" button opens inline submission form
 
-1. When user selects a workflow, frontend fetches `PipelineProfile[]`
-2. `PipelineProfile.parametersSchema` is a JSON Schema object
-3. `src/lib/schema.ts` dereferences local `$ref` values and flattens `allOf`
-   composition for field extraction
-4. Unsupported branch schemas such as `anyOf` and `oneOf` fail visibly because they
-   need an explicit UI choice
-5. Form fields generated dynamically:
+**Detail View**:
 
-**Field Type Mapping**:
+- Summary card with workflow metadata:
+    - Run ID, State, Start/End times, Duration, Triggered by
+- Task Instances table:
+    - All tasks with state, start/end times, duration, try count
+    - Updates via auto-refresh every 30 seconds
+- Workflow Submission Details accordion:
+    - Shows exact parameters submitted
+    - One accordion per stage
+    - Parameters displayed as key-value pairs
+    - Only present for workflows submitted after this feature was added
+- Manual refresh button (matching list view style)
+- Halt button for running workflows
+- Clear button for unavailable workflows
+- Browser back button works (URL-based navigation)
 
-```typescript
-// String with enum -> Select dropdown
-{ type: "string", enum: ["option1", "option2"] }
+**Parameter Form Generation**:
 
-// Boolean -> Checkbox
-{ type: "boolean" }
+- Form fields dynamically generated from JSON Schema in PipelineProfile
+- Supports: string, integer, number, boolean types
+- Respects: `title`, `description`, `default`, `minimum`, `maximum`, `enum`
+- Real-time validation before submission
 
-// Integer/Number -> Number input with min/max/step
-{ type: "integer", minimum: 0, maximum: 100 }
+**Submission Storage**:
 
-// String (default) -> Text input
-{ type: "string" }
+- Workflow runs stored in browser cookie (`workflow_runs`)
+- Includes: `dagId`, `dagRunId`, `submittedAt`, `submissionConfig`
+- Submission config captures workflow name, stages, and parameter values
+- Used for displaying submission details in detail view
 
-// Readonly (has const) -> Readonly text input
-{ const: "fixed-value" }
-```
+**Navigation**:
 
-**Default Values**:
+- 3 main tabs: Upload, Workflows, Report
+- Workflows view has 3 sub-states: list, submit, detail
+- URL parameters sync navigation state (enables browser back/forward)
+- Consolidated navigation (removed separate "Submit" top-level tab)
 
-- `default` property in schema -> pre-filled in form
-- `const` property in schema -> readonly, user cannot change
-- Boolean fields without default -> default to `false`
-- Other fields without default -> empty string
+**Technical Details**:
+
+**Workflow Selection**:
+
+- Fetches available workflows from `/api/v1/dags` (filtered by `dag_id_prefix=workflows`)
+- User selects workflow by display name
+
+**Profile Loading**:
+
+- Fetches profiles from `/api/v1/dags/{dagId}/dags`
+- Each profile includes `parametersSchema` (JSON Schema) for form generation
+- Multiple profiles = multi-stage workflow (one accordion per stage)
 
 **Validation**:
 
-- Schema compiled to AJV validation functions per stage
-- User-entered values are coerced to schema types before validation
-- Validation happens before preview submission
-- If validation fails, inline field errors and stage error counts are shown
-- Preview submission is blocked until every stage validates
+- AJV compiles JSON Schema to validation function
+- Form values validated before submission
+- Coercion applied for numeric fields
+- Shows validation errors in toast notifications
 
-**Serialization**:
+**Submission**:
 
-Each stage generates a payload object containing `pipelineId` and `nextflowOptions`:
+- POST to `/workflows/trigger?dagId={dagId}`
+- Payload: `{ "conf": { ... } }` with nested stage options
+- Response: `{ dag_run_id, dag_id }`
+- Workflow run stored in cookie with submission config
+- Auto-navigates to detail view
 
-```json
-{
-    "pipelineId": "bactopia-gather",
-    "nextflowOptions": {
-        "--genome_size": "5.0",
-        "--min_contig_length": 500
-    }
-}
-```
+**Status Monitoring**:
 
-The full workflow trigger payload is an object with a `pipelineConfigs` key containing an ordered array with one object per pipeline profile returned by `/workflows/pipelineprofiles`:
+- List view polls `/api/v1/dags/{dagId}/dagRuns/{dagRunId}` every 30s
+- Detail view polls same endpoint + `/workflows/run/taskinstances` every 30s
+- Only running/queued workflows auto-refresh
+- Manual refresh available via button
+- Live status stored in SvelteMap for reactivity
 
-```json
-{
-    "pipelineConfigs": [
-        {
-            "pipelineId": "bactopia-gather",
-            "nextflowOptions": { ... }
-        },
-        {
-            "pipelineId": "bactopia-kraken2",
-            "nextflowOptions": { ... }
-        }
-    ]
-}
-```
+**State Management**:
 
-The array order must be preserved so workflows that repeat the same pipeline can maintain stage identity.
+- Cookie storage: `workflow_runs` (persistent, 90-day retention)
+- Reactive state: `workflowRuns.svelte.ts` using SvelteMap
+- Live status cache: `liveStatus` map (transient, per-session)
+- Task instances: `SvelteMap<string, TaskInstance[]>` keyed by `{dagId}::{dagRunId}`
 
-**JSON Preview**:
+**Auto-Refresh Intervals**:
 
-- Collapsible advanced preview of the ordered workflow payload
-- Updates as user fills form
-- Helps users understand what would be submitted when backend triggering is enabled
-
-**Pipeline Runnable Flag**:
-
-- `pipelineRunnable: false` in profile -> Submit button disabled
-- Stage messaging explains why preview submission is disabled
+- List view: 30 seconds
+- Detail view: 30 seconds
+- Only active for running/queued workflows
+- Manual refresh always available
 
 **Implementation Files**:
 
-- `Submit.svelte`: Workflow selection, form rendering, validation orchestration, preview alert
-- `pipeline.ts`: API client and schema helper re-exports
-- `schema.ts`: AJV compile/validate helpers, schema field extraction, default/coercion helpers
+- `Submit.svelte`: Workflow selection, multi-stage form, submission, storage
+- `Status.svelte`: List view with cards, auto-refresh, cookie integration
+- `StatusDetail.svelte`: Detail view with task table, submission details, auto-refresh
+- `WorkflowRunCard.svelte`: Individual workflow card with progress display
+- `HaltWorkflowModal.svelte`: Confirmation modal for halting workflows
+- `pipeline.ts`: API client for workflows and profiles
+- `workflowStatus.ts`: API client for workflow runs and task instances
+- `workflowRunsStorage.ts`: Cookie persistence layer with SubmissionConfig type
+- `workflowRuns.svelte.ts`: Reactive state management
+- `schema.ts`: JSON Schema validation helpers
 
 ---
 

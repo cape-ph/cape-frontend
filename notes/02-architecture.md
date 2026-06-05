@@ -132,25 +132,46 @@ User -> Enter sample ID
 ### Workflow Status Monitoring Flow
 
 ```
-User -> Submits workflow
-     -> Response includes dag_run_id
-     -> Store {dagId, dagRunId, submittedAt} in cookies
-     -> Add to reactive workflowRuns state
-     -> Navigate to Status tab
-     -> Load workflow runs from cookies
-     -> Fetch live status from API for each run (parallel)
-     -> Display cards with state, progress, task counts
-     -> Auto-refresh every 10s for running workflows
-     -> Click "View Details" -> Show task instances table
-     -> Optional: Click "Halt Workflow" -> Confirm -> PATCH /workflows/halt
+User -> Navigates to Workflows tab
+     -> Clicks "Submit" button
+     -> Selects workflow from dropdown
+     -> Fetch workflow profiles (GET /workflows/pipelineprofiles?dagId={dagId})
+     -> Generate multi-stage form from JSON Schemas
+     -> User fills parameters for each stage
+     -> Validate all stages against schemas
+     -> POST to /workflows/trigger?dagId={dagId}
+     -> Response includes {dag_run_id, dag_id}
+     -> Store {dagId, dagRunId, submittedAt, submissionConfig} in cookies
+     -> Add to reactive workflowRuns state (SvelteMap)
+     -> Navigate to detail view (/?tab=workflows&view=detail&dagId=...&dagRunId=...)
+     -> Fetch workflow run + task instances (parallel)
+     -> Display summary card + task instances table + submission details accordion
+     -> Auto-refresh every 30s for running/queued workflows
+     -> Manual refresh button available
+     -> Click "Back to workflow list" -> Show all workflows with progress cards
+     -> List auto-refreshes every 30s for running workflows
+     -> Optional: Click "Halt" -> Confirm -> PATCH to halt endpoint
 ```
+
+**Key Architecture Points**:
+
+- **Cookie Storage**: `workflow_runs` cookie stores submission metadata + config (90-day retention)
+- **Reactive State**: `SvelteMap` for taskInstancesMap enables automatic UI updates on mutation
+- **URL-Based Navigation**: Query parameters sync with view state for browser back/forward support
+- **Consolidated Navigation**: Workflows tab contains list, submit, and detail views (no separate Submit tab)
+- **Submission Config Storage**: Captures workflow name, stages, and parameter values for display in detail view
+- **Auto-Refresh**: Only active for running/queued workflows, manual refresh always available
 
 ## State Management
 
 - **Global State**:
     - Authentication state via `auth` object in `user.svelte.ts`
-    - Workflow runs via `workflowRuns` object in `workflowRuns.svelte.ts` (stored runs + live status map)
+    - Workflow runs via `workflowRuns` object in `workflowRuns.svelte.ts` (stored runs + live status map using SvelteMap)
 - **Component State**: Local reactive state via `$state()` within components
 - **Derived State**: Computed values via `$derived()` (e.g., form validation state, task progress percentages)
-- **Persistent State**: Workflow runs stored in browser cookies (90-day retention)
+- **Persistent State**:
+    - Workflow runs stored in browser cookies with `SubmissionConfig` (90-day retention)
+    - Includes submission parameters for replay/review in detail view
+- **Reactive Collections**: `SvelteMap` from `svelte/reactivity` for task instances (auto-tracks mutations)
+- **URL State**: Navigation state synchronized with URL query parameters for browser back/forward support
 - **No External Store**: No Redux, Zustand, or other state management library needed due to Svelte's built-in reactivity
