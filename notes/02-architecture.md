@@ -129,9 +129,28 @@ User -> Enter sample ID
      -> Render HTML in sandboxed iframe
 ```
 
+### Workflow Status Monitoring Flow
+
+```
+User -> Submits workflow
+     -> Response includes dag_run_id
+     -> Store {dagId, dagRunId, submittedAt} in cookies
+     -> Add to reactive workflowRuns state
+     -> Navigate to Status tab
+     -> Load workflow runs from cookies
+     -> Fetch live status from API for each run (parallel)
+     -> Display cards with state, progress, task counts
+     -> Auto-refresh every 10s for running workflows
+     -> Click "View Details" -> Show task instances table
+     -> Optional: Click "Halt Workflow" -> Confirm -> PATCH /workflows/halt
+```
+
 ## State Management
 
-- **Global State**: Authentication state via `auth` object in `user.svelte.ts`
+- **Global State**:
+    - Authentication state via `auth` object in `user.svelte.ts`
+    - Workflow runs via `workflowRuns` object in `workflowRuns.svelte.ts` (stored runs + live status map)
 - **Component State**: Local reactive state via `$state()` within components
-- **Derived State**: Computed values via `$derived()` (e.g., form validation state)
+- **Derived State**: Computed values via `$derived()` (e.g., form validation state, task progress percentages)
+- **Persistent State**: Workflow runs stored in browser cookies (90-day retention)
 - **No External Store**: No Redux, Zustand, or other state management library needed due to Svelte's built-in reactivity

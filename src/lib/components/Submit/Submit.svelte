@@ -13,8 +13,13 @@
     import { onMount, untrack } from 'svelte';
     import { SvelteMap } from 'svelte/reactivity';
     import axios from 'axios';
+    import { addWorkflowRun } from '$lib/workflowRunsStorage';
+    import { addStoredRun } from '$lib/workflowRuns.svelte';
 
-    let { baseUrl } = $props<{ baseUrl: string }>();
+    let { baseUrl, onNavigateToDetail } = $props<{
+        baseUrl: string;
+        onNavigateToDetail?: (dagId: string, dagRunId: string) => void;
+    }>();
 
     type ResolvedProfile = PipelineProfile & {
         resolvedFields?: ParameterField[];
@@ -379,11 +384,27 @@
             const payload = serializeWorkflow();
             const endpoint = `${baseUrl}/workflows/trigger?dagId=${encodeURIComponent(selectedWorkflowDagId)}`;
 
-            await axios.post(endpoint, payload);
+            const response = await axios.post(endpoint, payload);
+            const { dag_run_id: dagRunId, dag_id: dagId } = response.data;
+
+            // Store workflow run for status tracking
+            const storedRun = {
+                dagId,
+                dagRunId,
+                submittedAt: new Date().toISOString()
+            };
+            addWorkflowRun(storedRun);
+            addStoredRun(storedRun);
 
             toaster.success({
-                title: 'Workflow submitted successfully'
+                title: 'Workflow submitted successfully',
+                description: 'Redirecting to workflow details...'
             });
+
+            // Navigate to detail view after successful submission
+            if (onNavigateToDetail) {
+                onNavigateToDetail(dagId, dagRunId);
+            }
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             toaster.error({
