@@ -40,7 +40,12 @@ This file provides guidance to AI coding agents (Claude Code, Cursor, Windsurf, 
 
 4. **PUBLIC file** - Never include secrets, API keys, passwords, or private information. This file may be committed to the repository.
 
-5. **Session continuity** - When a new session starts with "let's pick up where we left off", read NOTES.md FIRST to understand context.
+5. **Session continuity** - When a new session starts with "let's pick up where we left off":
+    - Read NOTES.md FIRST to understand recent work and context
+    - **Then read the `notes/` directory** to load comprehensive technical documentation into context
+    - The `notes/` directory contains essential architectural, API, data type, and implementation details
+    - NOTES.md is your working memory; `notes/` is the project knowledge base
+    - Both are required for effective session resume
 
 **Format Guidelines**:
 
@@ -203,6 +208,63 @@ npm run dev -- --open    # Start dev server and open browser automatically
 - Vite-powered fast rebuild
 - Source maps for debugging
 - Full TypeScript support
+
+### Dev Server Management for AI Agents
+
+**IMPORTANT**: When starting and stopping dev servers, avoid hanging and blocking your workflow.
+
+#### Starting the Dev Server
+
+**For background operation** (when you need to continue working):
+
+```bash
+# Start in background with nohup, redirect output to log
+nohup npm run dev > /tmp/vite-dev.log 2>&1 &
+
+# Wait briefly and verify it's running
+sleep 5 && curl -s http://localhost:3000 > /dev/null && echo "✓ Server ready"
+```
+
+**DO NOT**:
+
+- Run `npm run dev` without backgrounding (it will block indefinitely)
+- Wait for interactive output when running in background
+- Use `npm run dev &` alone (doesn't detach properly from shell)
+
+#### Stopping the Dev Server
+
+**MANDATORY: Always kill the server when testing is complete**:
+
+```bash
+# Kill all vite dev processes
+pkill -f "vite dev"
+
+# Verify it's stopped
+ps aux | grep "vite dev" | grep -v grep
+```
+
+**Policy**:
+
+- **Always stop the dev server after testing** unless explicitly instructed to leave it running
+- The dev server consumes resources and can interfere with future sessions
+- Verify the server is stopped before marking work complete
+
+**DO NOT**:
+
+- Leave the dev server running at end of testing
+- Try to kill with Ctrl+C when running in background
+- Wait indefinitely for confirmation when the process is already stopped
+- Use `kill` with specific PIDs unless you saved them
+
+#### Checking Server Status
+
+```bash
+# Quick check if server is responding
+curl -s http://localhost:3000 > /dev/null && echo "Running" || echo "Not running"
+
+# Check for running processes
+ps aux | grep "vite dev" | grep -v grep
+```
 
 ### Pre-Completion Checklist
 

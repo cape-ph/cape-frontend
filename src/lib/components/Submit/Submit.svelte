@@ -12,6 +12,7 @@
     import type { ValidateFunction } from 'ajv';
     import { onMount, untrack } from 'svelte';
     import { SvelteMap } from 'svelte/reactivity';
+    import axios from 'axios';
 
     let { baseUrl } = $props<{ baseUrl: string }>();
 
@@ -359,10 +360,6 @@
     }
 
     async function onSubmitWorkflow() {
-        if (workflowSubmitDisabled) {
-            return;
-        }
-
         // Validate all stages before submission
         const isValid = validateAllStages();
 
@@ -382,22 +379,15 @@
             const payload = serializeWorkflow();
             const endpoint = `${baseUrl}/workflows/trigger?dagId=${encodeURIComponent(selectedWorkflowDagId)}`;
 
-            const message = `Would POST to:\n${endpoint}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`;
+            await axios.post(endpoint, payload);
 
-            // Show in browser alert for now
-            alert(message);
-
-            toaster.info({
-                title: 'Workflow submission preview (not actually submitted)'
+            toaster.success({
+                title: 'Workflow submitted successfully'
             });
-
-            // TODO: Uncomment when ready to actually submit workflows
-            // await axios.post(endpoint, payload);
-            // toaster.info({ title: 'Workflow submitted' });
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             toaster.error({
-                title: `An error occurred while previewing the workflow: ${message}`
+                title: `An error occurred while submitting the workflow: ${message}`
             });
         }
     }
@@ -406,8 +396,7 @@
 <div class="mb-5 space-y-2">
     <h2 class="text-primary-700 dark:text-primary-300 text-2xl font-semibold">Submit Workflow</h2>
     <p class="text-sm text-gray-700 dark:text-gray-300">
-        Configure each stage in order. Submissions are preview-only until workflow triggering is
-        enabled.
+        Configure each stage in order, then submit your workflow.
     </p>
 </div>
 
@@ -753,14 +742,27 @@
         <details
             class="rounded-lg border border-gray-300 bg-white p-4 dark:border-gray-600 dark:bg-surface-950"
         >
-            <summary class="cursor-pointer text-lg font-semibold">Advanced Preview</summary>
+            <summary class="flex cursor-pointer items-center gap-2 text-lg font-semibold">
+                <svg
+                    class="details-chevron h-5 w-5 flex-shrink-0 transition-transform duration-200"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                >
+                    <path
+                        fill-rule="evenodd"
+                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                        clip-rule="evenodd"
+                    />
+                </svg>
+                <span>Advanced Preview</span>
+            </summary>
             <p class="mt-2 text-sm text-gray-700 dark:text-gray-300">
-                Ordered array payload preview. This does not submit the workflow.
+                JSON representation of the workflow submission payload.
             </p>
             <textarea
                 id="submission-json-preview"
                 name="submission-json-preview"
-                class="textarea textarea-bordered mt-3 min-h-[220px] w-full bg-white font-mono text-sm leading-5 text-gray-950 dark:bg-surface-950 dark:text-gray-100"
+                class="textarea textarea-bordered mt-3 min-h-[220px] w-full bg-gray-50 font-mono text-sm leading-5 text-gray-600 dark:bg-surface-900 dark:text-gray-400"
                 aria-label="Submission JSON preview"
                 readonly
                 spellcheck="false"

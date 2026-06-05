@@ -165,8 +165,7 @@ interface SubmissionData {
 
 **Response**: Success/error status (exact schema not shown in code, assumed standard REST)
 
-**Used By**: Direct single-pipeline submission integrations. The current Submit UI is
-preview-only for workflow submissions and does not POST to this endpoint.
+**Used By**: Legacy single-pipeline submission. The current Submit UI uses `/workflows/trigger` for workflow submissions instead of this endpoint.
 
 ---
 
@@ -256,8 +255,7 @@ type WorkflowTriggerRequest = {
 
 The `pipelineConfigs` array maintains positional order to preserve stage identity. A workflow may include the same pipeline more than once, so the array order (not pipeline name/ID) determines stage execution sequence.
 
-**Used By**: Future workflow execution. The current Submit UI keeps this path
-preview-only and shows the serialized payload in an alert instead of calling the API.
+**Used By**: Workflow submission in the Submit UI. The frontend POSTs to this endpoint when the user submits a configured workflow. Currently blocked by CORS preflight (OPTIONS returns 403) - backend needs to add CORS headers.
 
 ---
 

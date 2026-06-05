@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getWorkflows, getWorkflowProfiles } from '$lib/pipeline';
 import type { PipelineProfile, WorkflowDAG } from '$lib/pipeline';
 import Submit from './Submit.svelte';
+import axios from 'axios';
+
+vi.mock('axios');
 
 vi.mock('$lib/pipeline', () => ({
     getWorkflows: vi.fn(),
@@ -208,8 +211,9 @@ describe('Submit.svelte', () => {
         alertSpy.mockRestore();
     });
 
-    it('previews a wrapped payload with pipelineConfigs array without making a network submission', async () => {
-        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    it('submits a wrapped payload with pipelineConfigs array to the workflow trigger endpoint', async () => {
+        const axiosPostSpy = vi.spyOn(axios, 'post').mockResolvedValue({ data: {} });
+
         await renderSelectedSubmit([
             createProfile({
                 pipelineId: 'stage-1',
@@ -234,21 +238,29 @@ describe('Submit.svelte', () => {
 
         await fireEvent.click(screen.getByRole('button', { name: 'Submit Workflow' }));
 
-        expect(alertSpy).toHaveBeenCalledOnce();
-        const alertMessage = String(alertSpy.mock.calls[0][0]);
-        const payloadWrapper = JSON.parse(alertMessage.slice(alertMessage.indexOf('{\n')));
+        await waitFor(() => expect(axiosPostSpy).toHaveBeenCalledOnce());
 
-        expect(payloadWrapper).toHaveProperty('pipelineConfigs');
-        expect(Array.isArray(payloadWrapper.pipelineConfigs)).toBe(true);
-        expect(payloadWrapper.pipelineConfigs).toHaveLength(2);
+        const [endpoint, payload] = axiosPostSpy.mock.calls[0] as [
+            string,
+            { pipelineConfigs: unknown[] }
+        ];
+
+        expect(endpoint).toContain('/workflows/trigger');
+        expect(endpoint).toContain('dagId=test-workflow');
+
+        expect(payload).toHaveProperty('pipelineConfigs');
+        expect(Array.isArray(payload.pipelineConfigs)).toBe(true);
+        expect(payload.pipelineConfigs).toHaveLength(2);
         expect(
-            payloadWrapper.pipelineConfigs.map(
-                (stage: { nextflowOptions: Record<string, unknown> }) =>
-                    stage.nextflowOptions.param1 ?? stage.nextflowOptions.param2
+            payload.pipelineConfigs.map(
+                (stage) =>
+                    (stage as { nextflowOptions: Record<string, unknown> }).nextflowOptions
+                        .param1 ??
+                    (stage as { nextflowOptions: Record<string, unknown> }).nextflowOptions.param2
             )
         ).toEqual(['first', 'second']);
 
-        alertSpy.mockRestore();
+        axiosPostSpy.mockRestore();
     });
 
     it('ignores stale profile responses after workflow selection changes', async () => {
