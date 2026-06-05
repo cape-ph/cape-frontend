@@ -340,7 +340,7 @@
         return typeof value === 'string' ? value : value == null ? '' : String(value);
     }
 
-    function serializeWorkflow(): unknown[] {
+    function serializeWorkflow(): { pipelineConfigs: unknown[] } {
         const payloadArray: Record<string, unknown>[] = [];
 
         for (const prof of workflowProfiles ?? []) {
@@ -355,7 +355,7 @@
             payloadArray.push(stageData);
         }
 
-        return payloadArray;
+        return { pipelineConfigs: payloadArray };
     }
 
     async function onSubmitWorkflow() {
@@ -382,7 +382,7 @@
             const payload = serializeWorkflow();
             const endpoint = `${baseUrl}/workflows/trigger?dagId=${encodeURIComponent(selectedWorkflowDagId)}`;
 
-            const message = `Would POST to:\n${endpoint}\n\nPayload (array format):\n${JSON.stringify(payload, null, 2)}`;
+            const message = `Would POST to:\n${endpoint}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`;
 
             // Show in browser alert for now
             alert(message);

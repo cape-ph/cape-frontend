@@ -11,7 +11,7 @@
 
 ### Last Updated
 
-2026-06-04 (Strengthened documentation maintenance requirements in AGENTS.md)
+2026-06-05 (Wrapped workflow submission payload in pipelineConfigs object)
 
 ### Active Branch
 
@@ -23,10 +23,32 @@
 files in the same commit to prevent contextual drift. See AGENTS.md "Documentation
 Maintenance" section for full guidelines.
 
+#### Workflow Payload Wrapper for Airflow API (2026-06-05) ✅
+
+- **Problem**: Airflow API requires a configuration object, not a direct array
+- **Solution**: Wrapped array payload in an object with `pipelineConfigs` key
+- **Changes**:
+    - Updated `serializeWorkflow()` return type to `{ pipelineConfigs: unknown[] }`
+    - Changed return statement from `return payloadArray` to `return { pipelineConfigs: payloadArray }`
+    - Updated alert message to remove "(array format)" label
+    - Updated test to parse object and check `pipelineConfigs` property
+    - Updated test name to reflect wrapped structure
+- **Documentation updates**:
+    - `notes/03-api-endpoints.md`: Updated type definition and example with wrapper object
+    - `notes/10-workflows-submission-monitoring.md`: Updated payload structure, added wrapper object note
+    - `notes/05-functionality.md`: Added full payload example showing wrapper structure
+- **Payload transformation**:
+    - **Before**: `[{pipelineId: "...", nextflowOptions: {...}}, ...]`
+    - **After**: `{pipelineConfigs: [{pipelineId: "...", nextflowOptions: {...}}, ...]}`
+- **Verification**:
+    - All lint, format, and type-check validations pass ✅
+    - All tests pass (21/21) ✅
+    - Array order and stage structure preserved within wrapper
+
 #### Strengthened Documentation Requirements (2026-06-04) ✅
 
 - **Problem**: Documentation maintenance section existed in AGENTS.md but was buried at the end and easy to skip
-- **Solution**: 
+- **Solution**:
     - Moved "Documentation Maintenance" section earlier (right after "Development Workflow")
     - Added ⚠️ CRITICAL REQUIREMENT header to make it unmissable
     - Expanded "Pre-Completion Checklist" to explicitly call out documentation requirements

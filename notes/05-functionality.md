@@ -179,9 +179,24 @@ Each stage generates a payload object containing `pipelineId` and `nextflowOptio
 }
 ```
 
-The full workflow trigger payload is an ordered array with one object per pipeline profile
-returned by `/workflows/pipelineprofiles`. It must stay array-shaped so workflows that
-repeat the same pipeline can preserve stage identity.
+The full workflow trigger payload is an object with a `pipelineConfigs` key containing an ordered array with one object per pipeline profile returned by `/workflows/pipelineprofiles`:
+
+```json
+{
+    "pipelineConfigs": [
+        {
+            "pipelineId": "bactopia-gather",
+            "nextflowOptions": { ... }
+        },
+        {
+            "pipelineId": "bactopia-kraken2",
+            "nextflowOptions": { ... }
+        }
+    ]
+}
+```
+
+The array order must be preserved so workflows that repeat the same pipeline can maintain stage identity.
 
 **JSON Preview**:
 

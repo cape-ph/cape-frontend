@@ -208,7 +208,7 @@ describe('Submit.svelte', () => {
         alertSpy.mockRestore();
     });
 
-    it('previews an ordered array payload without making a network submission', async () => {
+    it('previews a wrapped payload with pipelineConfigs array without making a network submission', async () => {
         const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
         await renderSelectedSubmit([
             createProfile({
@@ -236,12 +236,13 @@ describe('Submit.svelte', () => {
 
         expect(alertSpy).toHaveBeenCalledOnce();
         const alertMessage = String(alertSpy.mock.calls[0][0]);
-        const payload = JSON.parse(alertMessage.slice(alertMessage.indexOf('[\n')));
+        const payloadWrapper = JSON.parse(alertMessage.slice(alertMessage.indexOf('{\n')));
 
-        expect(Array.isArray(payload)).toBe(true);
-        expect(payload).toHaveLength(2);
+        expect(payloadWrapper).toHaveProperty('pipelineConfigs');
+        expect(Array.isArray(payloadWrapper.pipelineConfigs)).toBe(true);
+        expect(payloadWrapper.pipelineConfigs).toHaveLength(2);
         expect(
-            payload.map(
+            payloadWrapper.pipelineConfigs.map(
                 (stage: { nextflowOptions: Record<string, unknown> }) =>
                     stage.nextflowOptions.param1 ?? stage.nextflowOptions.param2
             )

@@ -36,39 +36,42 @@ frontend now sends `{pipelineId, nextflowOptions}` directly without handling
 
 - `dagId` (required): Workflow identifier (e.g., `bactopia_and_kraken2_v3_2_0`)
 
-**Request Body**: JSON array with one stage object containing `pipelineId` and
-`nextflowOptions` per pipeline profile returned by `/workflows/pipelineprofiles`
+**Request Body**: JSON object containing a `pipelineConfigs` array with one stage object per pipeline profile returned by `/workflows/pipelineprofiles`. Each stage contains `pipelineId` and `nextflowOptions`.
 
 ```typescript
-type WorkflowTriggerRequest = Array<{
-    pipelineId: string;
-    nextflowOptions: Record<string, unknown>;
-}>;
+type WorkflowTriggerRequest = {
+    pipelineConfigs: Array<{
+        pipelineId: string;
+        nextflowOptions: Record<string, unknown>;
+    }>;
+};
 ```
 
 **Example Request** (Bactopia + Kraken2 workflow):
 
 ```json
-[
-    {
-        "pipelineId": "bactopia-gather-v3.2.0",
-        "nextflowOptions": {
-            "-profile": "aws",
-            "--max_cpus": 2,
-            "--max_memory": "24.GB",
-            "--sample": "airflow-sample",
-            "--ont": "s3://..."
+{
+    "pipelineConfigs": [
+        {
+            "pipelineId": "bactopia-gather-v3.2.0",
+            "nextflowOptions": {
+                "-profile": "aws",
+                "--max_cpus": 2,
+                "--max_memory": "24.GB",
+                "--sample": "airflow-sample",
+                "--ont": "s3://..."
+            }
+        },
+        {
+            "pipelineId": "bactopia-kraken2-v3.2.0",
+            "nextflowOptions": {
+                "-profile": "aws",
+                "--max_cpus": 2,
+                "--max_memory": "8.GB"
+            }
         }
-    },
-    {
-        "pipelineId": "bactopia-kraken2-v3.2.0",
-        "nextflowOptions": {
-            "-profile": "aws",
-            "--max_cpus": 2,
-            "--max_memory": "8.GB"
-        }
-    }
-]
+    ]
+}
 ```
 
 **Key Observations**:
@@ -79,6 +82,7 @@ type WorkflowTriggerRequest = Array<{
    once, so keyed objects can collapse distinct stages.
 3. **Simple structure**: Each stage contains `pipelineId` for identification and
    `nextflowOptions` as a typed object (no encoding logic needed)
+4. **Wrapper object**: The array is wrapped in an object with key `pipelineConfigs` to meet Airflow API requirements.
 
 ### Response Structure
 

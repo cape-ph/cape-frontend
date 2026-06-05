@@ -342,6 +342,7 @@ The `notes/` directory contains comprehensive technical documentation that **MUS
 ### How to Update Documentation
 
 **DO**:
+
 - Update docs in the SAME session as code changes
 - Search for references to changed/removed code: `grep -r "functionName" notes/`
 - Update type definitions to match actual implementation
@@ -349,6 +350,7 @@ The `notes/` directory contains comprehensive technical documentation that **MUS
 - Update `NOTES.md` with summary of documentation changes
 
 **DON'T**:
+
 - Skip documentation updates "to save time"
 - Leave outdated examples or explanations
 - Assume someone else will update docs later

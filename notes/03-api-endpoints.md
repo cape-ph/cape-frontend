@@ -218,41 +218,43 @@ Trigger a workflow run.
 
 - `dagId` (string, required): Workflow DAG identifier
 
-**Request Body**: ordered array of stage objects containing `pipelineId` and `nextflowOptions`.
+**Request Body**: object containing a `pipelineConfigs` array with ordered stage objects. Each stage contains `pipelineId` and `nextflowOptions`.
 
 ```typescript
-type WorkflowTriggerRequest = Array<{
-    pipelineId: string;
-    nextflowOptions: Record<string, unknown>;
-}>;
+type WorkflowTriggerRequest = {
+    pipelineConfigs: Array<{
+        pipelineId: string;
+        nextflowOptions: Record<string, unknown>;
+    }>;
+};
 ```
 
 **Example Request**:
 
 ```json
-[
-    {
-        "pipelineId": "bactopia-gather",
-        "nextflowOptions": {
-            "--max_cpus": 2,
-            "-profile": "aws",
-            "--sample": "sample-a"
+{
+    "pipelineConfigs": [
+        {
+            "pipelineId": "bactopia-gather",
+            "nextflowOptions": {
+                "--max_cpus": 2,
+                "-profile": "aws",
+                "--sample": "sample-a"
+            }
+        },
+        {
+            "pipelineId": "bactopia-main",
+            "nextflowOptions": {
+                "--max_cpus": 2,
+                "-profile": "aws",
+                "--bactopia": "s3://bucket/path"
+            }
         }
-    },
-    {
-        "pipelineId": "bactopia-main",
-        "nextflowOptions": {
-            "--max_cpus": 2,
-            "-profile": "aws",
-            "--bactopia": "s3://bucket/path"
-        }
-    }
-]
+    ]
+}
 ```
 
-Do not convert this payload into an object keyed by pipeline name or pipeline ID. A
-workflow may include the same pipeline more than once, so the positional array contract
-preserves stage identity.
+The `pipelineConfigs` array maintains positional order to preserve stage identity. A workflow may include the same pipeline more than once, so the array order (not pipeline name/ID) determines stage execution sequence.
 
 **Used By**: Future workflow execution. The current Submit UI keeps this path
 preview-only and shows the serialized payload in an alert instead of calling the API.
