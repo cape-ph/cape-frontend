@@ -35,6 +35,10 @@
     // Sync state with URL on mount and when URL changes
     onMount(() => {
         const unsubscribe = page.subscribe(($page) => {
+            if (!$page?.url) {
+                return;
+            }
+
             const params = $page.url.searchParams;
             const tab = params.get('tab');
             const view = params.get('view');

@@ -116,9 +116,10 @@
 4. Workflow profiles load automatically
 5. Fill in required parameters for each stage (accordion UI)
 6. Click "Submit Workflow" button
-7. Automatically navigated to detail view of running workflow
-8. Monitor progress via task instances table
-9. Use "Back to workflow list" to see all submitted workflows
+7. Button changes to "Submitting..." with a spinner and is disabled while the request is in flight
+8. Automatically navigated to detail view of running workflow
+9. Monitor progress via task instances table
+10. Use "Back to workflow list" to see all submitted workflows
 
 **Workflow List View**:
 
@@ -194,8 +195,10 @@
 **Submission**:
 
 - POST to `/workflows/trigger?dagId={dagId}`
-- Payload: `{ "conf": { ... } }` with nested stage options
+- Payload: `{ "pipelineConfigs": [{ "pipelineId": "...", "nextflowOptions": { ... } }] }`
 - Response: `{ dag_run_id, dag_id }`
+- Submit button is disabled and shows a spinner while the POST request is pending
+- Duplicate clicks during a pending submission are ignored
 - Workflow run stored in cookie with submission config
 - Auto-navigates to detail view
 
@@ -282,7 +285,7 @@
 
 - Displays CAPE logo
 - Shows authenticated user email
-- Tab navigation (Upload, Submit, Report)
+- Tab navigation (Upload, Workflows, Report)
 - Logout functionality
 
 ### FileUploadProgress

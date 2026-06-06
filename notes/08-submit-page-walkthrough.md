@@ -5,8 +5,8 @@ single-pipeline Submit page that fetched `/dap/pipelines`, selected a pipeline/v
 and posted to `/dap/submit`. The current Submit page is workflow-based: it fetches
 `/workflows`, loads an ordered profile array from `/workflows/pipelineprofiles`, renders
 one stage form per profile, validates with `src/lib/schema.ts`, and keeps
-`/workflows/trigger` preview-only. Treat the detailed trace below as historical context
-until this document is fully rewritten.
+`/workflows/trigger` as the active submission endpoint. Treat the detailed trace below
+as historical context until this document is fully rewritten.
 
 **Update (2026-06-04)**: The backend simplified the `/workflows/trigger` endpoint to
 accept `{pipelineId, nextflowOptions}` payloads directly. The frontend no longer uses

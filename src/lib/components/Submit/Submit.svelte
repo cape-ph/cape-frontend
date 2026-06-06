@@ -37,9 +37,11 @@
     let selectedWorkflowDagId = $state('');
     let workflowOptions = $state<Record<string, Record<string, unknown>>>({});
     let validationErrors = $state<Record<string, ValidationError[]>>({});
+    let isSubmittingWorkflow = $state(false);
     let workflowProfileRequestId = 0;
 
     const workflowSubmitDisabled = $derived(!workflowProfiles || workflowProfiles.length === 0);
+    const workflowSubmitButtonDisabled = $derived(workflowSubmitDisabled || isSubmittingWorkflow);
     const workflowJsonPreview = $derived(JSON.stringify(serializeWorkflow(), null, 2));
     const selectedWorkflow = $derived(
         workflows?.find((workflow) => workflow.dag_id === selectedWorkflowDagId)
@@ -365,6 +367,10 @@
     }
 
     async function onSubmitWorkflow() {
+        if (isSubmittingWorkflow) {
+            return;
+        }
+
         // Validate all stages before submission
         const isValid = validateAllStages();
 
@@ -379,6 +385,8 @@
             });
             return;
         }
+
+        isSubmittingWorkflow = true;
 
         try {
             const payload = serializeWorkflow();
@@ -427,6 +435,8 @@
             toaster.error({
                 title: `An error occurred while submitting the workflow: ${message}`
             });
+        } finally {
+            isSubmittingWorkflow = false;
         }
     }
 </script>
@@ -812,12 +822,30 @@
     <div class="group relative mt-2 pb-8 sm:pb-10">
         <button
             type="submit"
-            class="btn preset-filled-primary-500 w-full rounded-lg shadow-lg"
-            disabled={workflowSubmitDisabled}
+            class="btn preset-filled-primary-500 flex w-full items-center justify-center gap-2 rounded-lg shadow-lg"
+            disabled={workflowSubmitButtonDisabled}
             aria-describedby={workflowSubmitDisabled ? 'submit-disabled-tooltip' : undefined}
             onclick={onSubmitWorkflow}
         >
-            Submit Workflow
+            {#if isSubmittingWorkflow}
+                <svg
+                    class="h-4 w-4 animate-spin"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                </svg>
+                <span>Submitting...</span>
+            {:else}
+                <span>Submit Workflow</span>
+            {/if}
         </button>
         {#if workflowSubmitDisabled}
             <div

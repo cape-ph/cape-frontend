@@ -65,9 +65,7 @@ export function removeStoredRun(dagId: string, dagRunId: string): void {
  */
 export function setLiveStatus(dagId: string, dagRunId: string, status: WorkflowRunStatus): void {
     const key = getRunKey(dagId, dagRunId);
-    const newMap = new SvelteMap(workflowRuns.liveStatus);
-    newMap.set(key, status);
-    workflowRuns.liveStatus = newMap;
+    workflowRuns.liveStatus.set(key, status);
 }
 
 /**

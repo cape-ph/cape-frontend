@@ -170,6 +170,17 @@ async function renderSelectedSubmit(profiles: PipelineProfile[] = [createProfile
     return { select };
 }
 
+function createDeferred<T>() {
+    let resolve: (value: T) => void = () => {};
+    let reject: (reason?: unknown) => void = () => {};
+    const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+    });
+
+    return { promise, resolve, reject };
+}
+
 describe('Submit.svelte', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -259,6 +270,60 @@ describe('Submit.svelte', () => {
                     (stage as { nextflowOptions: Record<string, unknown> }).nextflowOptions.param2
             )
         ).toEqual(['first', 'second']);
+
+        axiosPostSpy.mockRestore();
+    });
+
+    it('shows a submitting state and prevents duplicate workflow trigger requests', async () => {
+        const pendingSubmission = createDeferred<{
+            data: { dag_id: string; dag_run_id: string };
+        }>();
+        const axiosPostSpy = vi.spyOn(axios, 'post').mockReturnValue(pendingSubmission.promise);
+
+        await renderSelectedSubmit();
+
+        await fireEvent.input(screen.getByLabelText('Parameter 1'), {
+            target: { value: 'value1' }
+        });
+
+        const submitButton = screen.getByRole('button', { name: 'Submit Workflow' });
+        await fireEvent.click(submitButton);
+        await fireEvent.click(submitButton);
+
+        await waitFor(() => expect(axiosPostSpy).toHaveBeenCalledOnce());
+
+        const submittingButton = screen.getByRole('button', { name: 'Submitting...' });
+        expect(submittingButton).toBeDisabled();
+
+        pendingSubmission.resolve({
+            data: {
+                dag_id: 'test-workflow',
+                dag_run_id: 'manual__2026-06-06T12:00:00+00:00'
+            }
+        });
+
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: 'Submit Workflow' })).toBeEnabled()
+        );
+
+        axiosPostSpy.mockRestore();
+    });
+
+    it('restores the submit button when workflow submission fails', async () => {
+        const axiosPostSpy = vi.spyOn(axios, 'post').mockRejectedValue(new Error('API failed'));
+
+        await renderSelectedSubmit();
+
+        await fireEvent.input(screen.getByLabelText('Parameter 1'), {
+            target: { value: 'value1' }
+        });
+
+        await fireEvent.click(screen.getByRole('button', { name: 'Submit Workflow' }));
+
+        await waitFor(() => expect(axiosPostSpy).toHaveBeenCalledOnce());
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: 'Submit Workflow' })).toBeEnabled()
+        );
 
         axiosPostSpy.mockRestore();
     });

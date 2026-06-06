@@ -113,6 +113,8 @@
     - Valid → POST to `/workflows/trigger?dagId={dagId}`
     - Invalid → Error toast with validation message
 10. Workflow submitted successfully:
+    - Submit button shows "Submitting..." with a spinner while the request is pending
+    - Submit button is disabled during the pending request to prevent duplicate submissions
     - Response includes `dag_run_id` and `dag_id`
     - Workflow run stored in browser cookie with submission config
     - User automatically navigated to detail view
@@ -313,7 +315,8 @@
 ### Feedback Loops
 
 - Inline validation feedback on Submit form fields
-- Advanced JSON preview in Submit tab
+- Advanced JSON preview in the Workflows submit view
+- Workflow submit button shows a spinner and disables itself while submission is pending
 - Per-chunk progress in file uploads
 - Clear success/error messages
 

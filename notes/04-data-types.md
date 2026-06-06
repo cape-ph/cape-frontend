@@ -97,14 +97,16 @@ Ordered workflow trigger payload. Each array item contains the pipeline ID and c
 Nextflow options object for one pipeline profile returned by `/workflows/pipelineprofiles`.
 
 ```typescript
-type WorkflowTriggerRequest = Array<{
-    pipelineId: string;
-    nextflowOptions: Record<string, unknown>;
-}>;
+type WorkflowTriggerRequest = {
+    pipelineConfigs: Array<{
+        pipelineId: string;
+        nextflowOptions: Record<string, unknown>;
+    }>;
+};
 ```
 
-The array order must match the pipeline profile response order. This avoids ambiguity
-when a workflow uses the same pipeline more than once.
+The `pipelineConfigs` array order must match the pipeline profile response order. This
+avoids ambiguity when a workflow uses the same pipeline more than once.
 
 **Used In**: Submit preview serialization and future `/workflows/trigger` calls
 
@@ -514,6 +516,7 @@ interface StoredWorkflowRun {
     dagId: string;
     dagRunId: string;
     submittedAt: string; // ISO 8601 timestamp
+    submissionConfig?: SubmissionConfig; // Submitted stage parameters, if captured
 }
 ```
 

@@ -255,7 +255,7 @@ type WorkflowTriggerRequest = {
 
 The `pipelineConfigs` array maintains positional order to preserve stage identity. A workflow may include the same pipeline more than once, so the array order (not pipeline name/ID) determines stage execution sequence.
 
-**Used By**: Workflow submission in the Submit UI. The frontend POSTs to this endpoint when the user submits a configured workflow. Currently blocked by CORS preflight (OPTIONS returns 403) - backend needs to add CORS headers.
+**Used By**: Workflow submission in the Submit UI. The frontend POSTs to this endpoint when the user submits a configured workflow. Backend CORS support for this endpoint was resolved on 2026-06-05, so browser submissions are expected to complete normally.
 
 ---
 

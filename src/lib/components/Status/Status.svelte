@@ -31,9 +31,6 @@
         const stored = getStoredWorkflowRuns();
         setStoredRuns(stored);
 
-        // Auto-prune old unavailable workflows
-        pruneOldUnavailableRuns();
-
         // Fetch initial status for all runs
         refreshAllRuns();
 
@@ -83,14 +80,21 @@
         });
 
         await Promise.all(promises);
+        pruneOldUnavailableRuns();
         isRefreshing = false;
     }
 
     async function refreshRunningWorkflows() {
+        if (isRefreshing) return;
+
         const runningRuns = workflowRuns.stored.filter((run) => {
             const status = getLiveStatus(run.dagId, run.dagRunId);
             return status?.run?.state === 'running' || status?.run?.state === 'queued';
         });
+
+        if (runningRuns.length === 0) return;
+
+        isRefreshing = true;
 
         const promises = runningRuns.map(async (run) => {
             try {
@@ -115,6 +119,7 @@
         });
 
         await Promise.all(promises);
+        isRefreshing = false;
     }
 
     function pruneOldUnavailableRuns() {

@@ -11,17 +11,31 @@
 
 ### Last Updated
 
-2026-06-05 (Workflow management consolidated into unified "Workflows" page - Submit tab removed from navigation)
+2026-06-06 (Submit loading state added and workflow branch audit cleanup completed)
 
 ### Active Branch
 
-`19-use-jsonschema-from-pipelineprofile` - JSON Schema-based workflow form generation with validation and review remediation
+`workflow_status` - Workflow submission, monitoring, and status-detail UX improvements
 
 ### Recent Work Completed
 
 **IMPORTANT**: When making code changes, always update relevant `notes/*.md` documentation
 files in the same commit to prevent contextual drift. See AGENTS.md "Documentation
 Maintenance" section for full guidelines.
+
+#### Submit Loading State and Branch Audit Cleanup (2026-06-06) ✅
+
+- **Goal**: Give users immediate feedback while workflow submission is pending and audit branch changes since `main` for small cleanup opportunities
+- **Changes made**:
+    - Added `Submitting...` button state with spinner to `Submit.svelte`
+    - Disabled workflow submit button while POST to `/workflows/trigger` is in flight
+    - Added duplicate-submit guard so repeated clicks cannot trigger multiple workflow runs
+    - Added tests for pending submit UI, duplicate prevention, and retry after failed submit
+    - Deleted unused `src/lib/mockWorkflowData.ts` after confirming mock mode was removed
+    - Simplified `setLiveStatus()` to mutate `SvelteMap` directly instead of cloning the map on every status update
+    - Prevented overlapping list refreshes and made auto-refresh use the existing refresh indicator
+    - Updated stale workflow docs for trigger payload, resolved CORS, current monitoring, and submit loading behavior
+- **Status**: Implementation complete; validation results recorded in the session final response
 
 #### Navigation Consolidation (2026-06-05) ✅
 
@@ -847,13 +861,13 @@ selectedWorkflowDagId (state)
 1. **[RESOLVED] No client-side validation** - Implemented with AJV + visual error feedback ✅
 2. **[RESOLVED] Workflow submission blocked by CORS** - Backend resolved 2026-06-05 ✅
 3. **No form state persistence** - values lost on refresh
-4. **No job tracking** - submit and forget, no status monitoring
+4. **[RESOLVED] Workflow job tracking** - Workflow runs are stored and monitored in the Workflows page ✅
 5. **Report ID hardcoded** - `"bactopia-single-sample-analysis"` not user-configurable
 6. **No error recovery for partial uploads** - abort on any error
 
 ### Missing Features (API exists but UI doesn't expose)
 
-1. **Workflow status monitoring** - After submission, no tracking of execution
+1. **[RESOLVED] Workflow status monitoring** - Implemented in the Workflows page ✅
 2. **Pipeline logs** - `/dap/logs` endpoint unused
 3. **Pipeline status** - `/dap/status` endpoint unused
 4. **Storage browsing** - `/objstorage/contents` unused
@@ -926,8 +940,8 @@ Two workspaces:
 
 ### Future Enhancements
 
-- [ ] Workflow status monitoring after submission
-- [ ] Real-time workflow execution tracking
+- [x] Workflow status monitoring after submission ✅
+- [x] Workflow execution tracking with 30-second polling ✅
 - [ ] Pipeline logs viewer (leverage `/dap/logs`)
 - [ ] Storage browser (leverage `/objstorage/contents`, `/objstorage/crawler`)
 - [ ] User profile management (leverage `/user/attribute[s]`)
@@ -987,7 +1001,9 @@ node -e "const axios=require('axios');const https=require('https');(async()=>{co
 ### Key Files to Read First
 
 - `src/lib/components/Submit/Submit.svelte` - Schema-driven form generation
-- `src/lib/pipeline.ts` - API client and validation (unused validation!)
+- `src/lib/components/Status/Status.svelte` - Workflow list, status polling, and refresh behavior
+- `src/lib/components/Status/StatusDetail.svelte` - Workflow detail, task table, halt/clear controls
+- `src/lib/pipeline.ts` - Workflow API client for DAGs and pipeline profiles
 - `src/lib/mpu.ts` - Multipart upload implementation
 - `notes/README.md` - Documentation index
 
@@ -995,7 +1011,7 @@ node -e "const axios=require('axios');const https=require('https');(async()=>{co
 
 - Understanding complete application flow (done)
 - Identifying used vs unused API endpoints (done)
-- Next: Likely implementing validation or exposing more API features
+- Next: Form state persistence, report configurability, upload recovery, or backend-backed workflow history
 
 ### Questions to Ask User
 

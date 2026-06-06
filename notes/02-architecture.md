@@ -105,19 +105,19 @@ User -> Select FASTA files + Enter metadata
      -> Display success notification
 ```
 
-### Pipeline Submission Flow
+### Workflow Submission Flow
 
 ```
-User -> Select pipeline name
-     -> Fetch available versions
-     -> Select version
-     -> Fetch PipelineProfile (includes parametersSchema)
-     -> Generate form fields from schema
-     -> User fills form
-     -> Validate against schema
-     -> Serialize to JSON
-     -> POST to /dap/submit
-     -> Display success/error notification
+User -> Navigate to Workflows tab
+     -> Open submit view
+     -> Select workflow DAG
+     -> Fetch ordered PipelineProfile[] for workflow stages
+     -> Generate one form section per stage from JSON Schema
+     -> User fills stage parameters
+     -> Validate all stages against schemas
+     -> POST { pipelineConfigs } to /workflows/trigger
+     -> Store returned dag_run_id
+     -> Navigate to workflow detail view
 ```
 
 ### Report Viewing Flow
