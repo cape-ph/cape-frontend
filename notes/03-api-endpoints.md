@@ -255,7 +255,7 @@ type WorkflowTriggerRequest = {
 
 The `pipelineConfigs` array maintains positional order to preserve stage identity. A workflow may include the same pipeline more than once, so the array order (not pipeline name/ID) determines stage execution sequence.
 
-**Used By**: Workflow submission in the Submit UI. The frontend POSTs to this endpoint when the user submits a configured workflow. Currently blocked by CORS preflight (OPTIONS returns 403) - backend needs to add CORS headers.
+**Used By**: Workflow submission in the Submit UI. The frontend POSTs to this endpoint when the user submits a configured workflow. Backend CORS support for this endpoint was resolved on 2026-06-05, so browser submissions are expected to complete normally.
 
 ---
 
@@ -425,6 +425,225 @@ Abort an in-progress multipart upload (cleanup).
 **Response**: Empty success response
 
 **Used By**: `abortMultipartUpload()` in mpu.ts on upload error or cancellation
+
+---
+
+## Workflow Status Endpoints
+
+### GET /workflows/run
+
+Get workflow run status by DAG ID and run ID.
+
+**Query Parameters**:
+
+- `dagId` (string, required): Workflow DAG ID
+- `dagRunId` (string, required): Workflow run ID (format: `manual+YYYY-MM-DDTHH:MM:SS+00:00`)
+
+**Response**: `WorkflowRun` object
+
+```json
+{
+    "dag_run_id": "manual+2024-01-15T10:30:00+00:00",
+    "dag_id": "bactopia_workflow",
+    "logical_date": "2024-01-15T10:30:00+00:00",
+    "queued_at": "2024-01-15T10:30:00.123456+00:00",
+    "start_date": "2024-01-15T10:30:05.789012+00:00",
+    "end_date": null,
+    "data_interval_start": "2024-01-15T10:30:00+00:00",
+    "data_interval_end": "2024-01-15T10:30:00+00:00",
+    "run_after": "2024-01-15T10:30:00+00:00",
+    "last_scheduling_decision": "2024-01-15T10:30:05+00:00",
+    "run_type": "manual",
+    "state": "running",
+    "triggered_by": "cape.default@example.com",
+    "conf": {},
+    "dag_versions": [
+        {
+            "id": "abc123",
+            "version_number": 1,
+            "dag_id": "bactopia_workflow",
+            "bundle_name": "bactopia-bundle-v1",
+            "created_at": "2024-01-10T08:00:00+00:00"
+        }
+    ]
+}
+```
+
+**Used By**: `getWorkflowRun()` in workflowStatus.ts, Status detail view
+
+**Error Cases**:
+
+- `404`: Workflow run not found (may be removed or retention period expired)
+- `400`: Invalid dagId or dagRunId format
+
+---
+
+### GET /workflows/run/taskinstances
+
+Get all task instances for a workflow run.
+
+**Query Parameters**:
+
+- `dagId` (string, required): Workflow DAG ID
+- `dagRunId` (string, required): Workflow run ID
+
+**Response**: `TaskInstancesResponse` object
+
+```json
+{
+    "task_instances": [
+        {
+            "id": "task-uuid-1",
+            "task_id": "gather_samples",
+            "dag_id": "bactopia_workflow",
+            "dag_run_id": "manual+2024-01-15T10:30:00+00:00",
+            "map_index": -1,
+            "logical_date": "2024-01-15T10:30:00+00:00",
+            "run_after": "2024-01-15T10:30:00+00:00",
+            "start_date": "2024-01-15T10:30:10+00:00",
+            "end_date": "2024-01-15T10:32:45+00:00",
+            "state": "success",
+            "try_number": 1,
+            "max_tries": 3,
+            "task_display_name": "Gather Samples",
+            "hostname": "worker-node-1",
+            "unixname": "airflow",
+            "pool": "default_pool",
+            "pool_slots": 1,
+            "queue": "default",
+            "priority_weight": 1,
+            "operator": "PythonOperator",
+            "queued_when": "2024-01-15T10:30:05+00:00",
+            "scheduled_when": "2024-01-15T10:30:08+00:00",
+            "pid": 12345,
+            "executor_config": "{}",
+            "rendered_fields": {},
+            "dag_version": {
+                "id": "abc123",
+                "version_number": 1,
+                "dag_id": "bactopia_workflow",
+                "bundle_name": "bactopia-bundle-v1",
+                "created_at": "2024-01-10T08:00:00+00:00"
+            }
+        }
+    ],
+    "total_entries": 8
+}
+```
+
+**Used By**: `getTaskInstances()` in workflowStatus.ts, Status list and detail views
+
+**Error Cases**:
+
+- `404`: Workflow run not found
+- `400`: Invalid dagId or dagRunId format
+
+---
+
+### GET /workflows/tasks
+
+Get task definitions for a workflow (metadata about tasks in the DAG).
+
+**Query Parameters**:
+
+- `dagId` (string, required): Workflow DAG ID
+
+**Response**: `WorkflowTasksResponse` object
+
+```json
+{
+    "tasks": [
+        {
+            "task_id": "gather_samples",
+            "task_display_name": "Gather Samples",
+            "owner": "airflow",
+            "start_date": "2024-01-01T00:00:00+00:00",
+            "trigger_rule": "all_success",
+            "depends_on_past": false,
+            "wait_for_downstream": false,
+            "retries": 3,
+            "queue": "default",
+            "pool": "default_pool",
+            "pool_slots": 1,
+            "retry_delay": {
+                "__type": "TimeDelta",
+                "days": 0,
+                "seconds": 300,
+                "microseconds": 0
+            },
+            "retry_exponential_backoff": false,
+            "priority_weight": 1,
+            "weight_rule": "downstream",
+            "ui_color": "#ffefeb",
+            "ui_fgcolor": "#000000",
+            "template_fields": ["op_args", "op_kwargs"],
+            "downstream_task_ids": ["run_bactopia"],
+            "operator_name": "PythonOperator",
+            "params": {},
+            "class_ref": {
+                "module_path": "airflow.operators.python",
+                "class_name": "PythonOperator"
+            },
+            "is_mapped": false,
+            "extra_links": []
+        }
+    ],
+    "total_entries": 8
+}
+```
+
+**Used By**: `getWorkflowTasks()` in workflowStatus.ts (available but not currently displayed)
+
+**Error Cases**:
+
+- `404`: Workflow DAG not found
+- `400`: Invalid dagId format
+
+---
+
+### PATCH /workflows/halt
+
+Halt a running workflow (mark for termination).
+
+**Query Parameters**:
+
+- `dagId` (string, required): Workflow DAG ID
+- `dagRunId` (string, required): Workflow run ID
+
+**Request Body** (optional):
+
+```json
+{
+    "note": "Halted due to incorrect parameters"
+}
+```
+
+**Response**: Updated `WorkflowRun` object with `state: 'failed'` and optional `note`
+
+```json
+{
+    "dag_run_id": "manual+2024-01-15T10:30:00+00:00",
+    "dag_id": "bactopia_workflow",
+    "state": "failed",
+    "note": "Halted due to incorrect parameters",
+    ...
+}
+```
+
+**Used By**: `haltWorkflow()` in workflowStatus.ts, HaltWorkflowModal component
+
+**Behavior**:
+
+- Terminates all running tasks immediately
+- Sets workflow state to `failed`
+- Stores optional note with halt reason
+- Irreversible action
+
+**Error Cases**:
+
+- `404`: Workflow run not found
+- `400`: Workflow not in running or queued state
+- `400`: Invalid dagId or dagRunId format
 
 ---
 

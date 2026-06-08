@@ -6,6 +6,31 @@ This file provides guidance to AI coding agents (Claude Code, Cursor, Windsurf, 
 
 ## AI Assistant Context Management
 
+### SESSION RESUME PROTOCOL (MANDATORY - Execute First)
+
+When the user says "let's pick up where we left off" or any similar resume phrase:
+
+**YOU MUST COMPLETE THESE STEPS IN ORDER BEFORE DOING ANYTHING ELSE:**
+
+- [ ] **Step 1**: Read `NOTES.md` to understand recent work and context
+- [ ] **Step 2**: Read ALL `notes/*.md` files in parallel (use multiple parallel read calls)
+- [ ] **Step 3**: ONLY AFTER both steps complete, respond to user or ask clarifying questions
+
+**DO NOT:**
+
+- Skip step 2
+- Ask questions before loading both NOTES.md and notes/
+- Start any work before loading full context
+- Treat the notes/ directory as optional
+
+**WHY THIS MATTERS:**
+
+- `NOTES.md` = your working memory (what happened recently)
+- `notes/` = project knowledge base (architecture, APIs, types, patterns)
+- Both are REQUIRED for effective session resume, not optional
+
+---
+
 ### NOTES.md - Your Persistent Memory
 
 **Location**: `./NOTES.md`
@@ -42,10 +67,11 @@ This file provides guidance to AI coding agents (Claude Code, Cursor, Windsurf, 
 
 5. **Session continuity** - When a new session starts with "let's pick up where we left off":
     - Read NOTES.md FIRST to understand recent work and context
-    - **Then read the `notes/` directory** to load comprehensive technical documentation into context
+    - **IMMEDIATELY read ALL files in the `notes/` directory in parallel** - DO NOT skip this step
+    - **DO NOT ask questions or start work until BOTH NOTES.md and notes/ are fully loaded**
     - The `notes/` directory contains essential architectural, API, data type, and implementation details
     - NOTES.md is your working memory; `notes/` is the project knowledge base
-    - Both are required for effective session resume
+    - Loading both is MANDATORY, not optional
 
 **Format Guidelines**:
 

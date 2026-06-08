@@ -6,6 +6,11 @@
 frontend now sends `{pipelineId, nextflowOptions}` directly without handling
 `submission.encoding` logic. See updated payload examples in this document.
 
+**Update (2026-06-06)**: Workflow monitoring is implemented in the consolidated
+Workflows page. Submitted runs are stored in the `workflow_runs` cookie with optional
+submission configuration, the app navigates directly to the detail view after
+submission, and active runs refresh every 30 seconds.
+
 ---
 
 ## Understanding Workflow Submission & Tracking
@@ -335,18 +340,23 @@ interface HaltRequest {
 **Request**:
 
 ```json
-[
-    {
-        "nextflowOptions": "--sample test --ont s3://...",
-        "pipelineOutputBucket": "s3://bucket",
-        "pipelineOutputPrefix": "path"
-    },
-    {
-        "nextflowOptions": "--max_cpus 2",
-        "pipelineOutputBucketName": "s3://bucket",
-        "pipelineOutputPrefix": "path"
-    }
-]
+{
+    "pipelineConfigs": [
+        {
+            "pipelineId": "bactopia-ont-v3.2.0",
+            "nextflowOptions": {
+                "--sample": "test",
+                "--ont": "s3://..."
+            }
+        },
+        {
+            "pipelineId": "bactopia-kraken2-v3.2.0",
+            "nextflowOptions": {
+                "--max_cpus": 2
+            }
+        }
+    ]
+}
 ```
 
 **Multiple forms** (one per stage) → **Single workflow submission** → **Tracking via `dag_run_id`**
@@ -362,6 +372,10 @@ Frontend is **stateless** (SvelteKit SSR/SPA with no server-side session):
 - User submits workflow → receives `dag_run_id`
 - User navigates away or refreshes → **`dag_run_id` lost**
 - Cannot check status of previously submitted workflows
+
+**Current implementation**: submitted workflow runs are stored in the `workflow_runs`
+cookie with `dagId`, `dagRunId`, `submittedAt`, and optional `submissionConfig`, so the
+Workflows page can reload and monitor runs after navigation or refresh.
 
 ### Solution Options
 
@@ -437,17 +451,17 @@ To move from the current preview-only Submit page to active workflow submission:
 ✅ Select workflow (instead of pipeline)
 ✅ Fetch pipeline profiles for all stages
 ✅ Render forms for each pipeline stage
-✅ Build ordered array payload from stage parameters
+✅ Build wrapped `pipelineConfigs` payload from stage parameters
 ✅ POST workflow payload to `/workflows/trigger`
 ✅ Show success toast with confirmation and returned `dag_run_id`
 
 ### Nice to Have (Not Feature Parity)
 
-❌ Track `dag_run_id` in localStorage
-❌ Show "View Status" link after submission
-❌ Poll for workflow status
-❌ Display task-level progress
-❌ Cancel running workflows
+✅ Track `dag_run_id` in browser cookie storage
+✅ Navigate to workflow detail after submission
+✅ Poll for workflow status
+✅ Display task-level progress
+✅ Halt running workflows
 
 ---
 
@@ -463,16 +477,16 @@ To move from the current preview-only Submit page to active workflow submission:
 
 ### Phase 2: Active Submission
 
-1. Build request body as an array matching the `/workflows/pipelineprofiles` order
-2. Compile each stage object according to its profile submission encoding
+1. Build request body as a `pipelineConfigs` array matching the `/workflows/pipelineprofiles` order
+2. Include each stage's `pipelineId` and typed `nextflowOptions` object
 3. POST to `/workflows/trigger?dagId=X`
 4. Display success toast
-5. _(Optional)_ Store `dag_run_id` in localStorage for future status checks
+5. Store `dag_run_id` in cookie storage for future status checks
 
-### Phase 3: (Future) Monitoring
+### Phase 3: Monitoring
 
-1. Add "My Workflows" page
-2. Load runs from localStorage
+1. Use the consolidated Workflows page
+2. Load runs from cookie storage
 3. Poll `/workflows/run` for each run
 4. Display status and task progress
 5. Enable cancellation via `/workflows/halt`
@@ -505,17 +519,13 @@ of the API contract.
 
 ## Open Questions
 
-1. **Parameter encoding**: Should all parameters go in `nextflowOptions` string, or is mixed encoding (some direct fields + some in string) intentional?
+1. **UISchema usage**: Should frontend implement JsonForms layout hints from `uiSchema` field, or ignore for MVP?
 
-2. **Output configuration**: Why different field names (`pipelineOutputBucket` vs `pipelineOutputBucketName`)? Should frontend normalize or preserve differences?
+2. **Parameter dependencies**: How to show Stage 2's `--bactopia` parameter should reference Stage 1's `--outdir` value? Auto-populate or require user to copy-paste?
 
-3. **UISchema usage**: Should frontend implement JsonForms layout hints from `uiSchema` field, or ignore for MVP?
+3. **Run history limit**: Cookie storage is capped by browser cookie size. Should the UI keep only the most recent runs or move run history to a backend store?
 
-4. **Parameter dependencies**: How to show Stage 2's `--bactopia` parameter should reference Stage 1's `--outdir` value? Auto-populate or require user to copy-paste?
-
-5. **Status polling**: What's reasonable polling interval? 5 seconds? 10 seconds? 30 seconds?
-
-6. **Run history limit**: If using localStorage, how many runs to keep? Last 10? Last 50? All time with manual cleanup?
+4. **Backend history**: Should workflow run history move to a server-side user history endpoint for cross-device visibility?
 
 ---
 

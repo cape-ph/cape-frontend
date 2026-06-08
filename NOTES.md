@@ -11,11 +11,11 @@
 
 ### Last Updated
 
-2026-06-05 (Workflow submission fully operational - backend CORS resolved)
+2026-06-06 (Submit loading state added and workflow branch audit cleanup completed)
 
 ### Active Branch
 
-`19-use-jsonschema-from-pipelineprofile` - JSON Schema-based workflow form generation with validation and review remediation
+`workflow_status` - Workflow submission, monitoring, and status-detail UX improvements
 
 ### Recent Work Completed
 
@@ -23,7 +23,398 @@
 files in the same commit to prevent contextual drift. See AGENTS.md "Documentation
 Maintenance" section for full guidelines.
 
-#### Documentation and Workflow Improvements (2026-06-05) ✅
+#### Submit Loading State and Branch Audit Cleanup (2026-06-06) ✅
+
+- **Goal**: Give users immediate feedback while workflow submission is pending and audit branch changes since `main` for small cleanup opportunities
+- **Changes made**:
+    - Added `Submitting...` button state with spinner to `Submit.svelte`
+    - Disabled workflow submit button while POST to `/workflows/trigger` is in flight
+    - Added duplicate-submit guard so repeated clicks cannot trigger multiple workflow runs
+    - Added tests for pending submit UI, duplicate prevention, and retry after failed submit
+    - Deleted unused `src/lib/mockWorkflowData.ts` after confirming mock mode was removed
+    - Simplified `setLiveStatus()` to mutate `SvelteMap` directly instead of cloning the map on every status update
+    - Prevented overlapping list refreshes and made auto-refresh use the existing refresh indicator
+    - Updated stale workflow docs for trigger payload, resolved CORS, current monitoring, and submit loading behavior
+- **Status**: Implementation complete; validation results recorded in the session final response
+
+#### Navigation Consolidation (2026-06-05) ✅
+
+- **Goal**: Consolidate workflow management into a single "Workflows" page to simplify navigation and create a central hub for both submitting and monitoring workflows
+- **UX rationale**: Having Submit as a separate top-level tab was redundant when the Status page could handle both functions - "Submit Workflow" button on the Workflows page is sufficient for starting workflows
+- **Changes made**:
+    - Renamed "Status" tab to "Workflows" in main navigation
+    - Removed "Submit" tab from main navigation (3 tabs now: Upload, Workflows, Report)
+    - Updated page routing: workflows view supports 3 states (list, submit, detail)
+    - "Submit Workflow" button navigates to inline submission form within Workflows page
+    - Updated page header from "Workflow Status" to "Workflows"
+    - Updated subtitle to "Submit and monitor your workflows" (emphasizes dual purpose)
+- **Benefits**:
+    - Cleaner, simpler navigation (3 tabs instead of 4)
+    - Workflows page is now the single source of truth for all workflow operations
+    - More intuitive UX - users stay in Workflows context for both submission and monitoring
+    - Submit form still fully accessible via prominent "Submit Workflow" button
+- **Validation**:
+    - `npm run format` ✅
+    - `npm run lint` ✅
+    - `npm run check` ✅ (zero errors)
+    - Browser testing: navigation works correctly, Submit button opens inline form, clicking tabs resets workflow view state ✅
+- **Status**: Navigation consolidation complete and production-ready ✅
+
+#### Post-Submission Navigation to Detail View (2026-06-05) ✅
+
+- **Goal**: After successful workflow submission, automatically navigate user to the detail view of the newly submitted run
+- **UX rationale**: Users should immediately see their workflow running after submission rather than having to manually navigate to the list and click "View details"
+- **Changes made**:
+    - Added `onNavigateToDetail` callback prop to `Submit.svelte` (optional callback receives dagId and dagRunId)
+    - Updated success toast message from "View status in the Status tab" to "Redirecting to workflow details..."
+    - Invokes `onNavigateToDetail(dagId, dagRunId)` after successful submission
+    - Wired callback in `+page.svelte` to call existing `handleSelectRun` function (sets view to detail and selected run IDs)
+- **Smoke test results** (real API, submitted workflow with dummy "asdf" parameters):
+    1. ✅ **Submission works**: Successfully POSTed to `/api/v1/dags/{dagId}/dagRuns` endpoint
+    2. ✅ **Cookie storage works**: `workflow_runs` cookie correctly stores `[{dagId, dagRunId, submittedAt}]`
+    3. ✅ **Auto-navigation works**: User redirected to detail view immediately after submission
+    4. ✅ **Detail view displays correctly**: Shows workflow name, run ID, state ("Running"), task instances table
+    5. ✅ **Detail view refreshes**: Auto-refresh every 10 seconds fetches updated state from API
+    6. ✅ **List view shows submitted run**: "Back to workflow list" navigates to list view, submitted workflow visible with state "running"
+- **Example workflow submitted**:
+    - DAG: `bactopia_and_kraken2_v3_2_0_deploy_test`
+    - Run ID: `manual__2026-06-05T19:15:24.632851+00:00`
+    - State: Running (one task "Up_for_retry" as expected with invalid parameters)
+- **Validation**:
+    - `npm run format` ✅
+    - `npm run lint` ✅
+    - `npm run check` ✅
+    - Real API smoke test ✅ (all 6 requirements verified)
+- **Status**: Post-submission navigation complete and production-ready ✅
+
+#### Task Progress Display Fix (2026-06-05) ✅
+
+- **Problem**: Workflow cards in list view showed task count (e.g., "/ 4") but no progress bar or completed/failed counts, despite API returning task instances correctly
+- **Root cause**: Svelte 5 reactivity issue - `$state(new Map())` doesn't automatically track mutations like `.set()` calls on the Map
+- **Investigation**:
+    - Task instances API (`/workflows/run/taskinstances`) returning data correctly (4 tasks)
+    - `taskInstancesMap.set(key, taskInstances)` was being called and data stored
+    - BUT: component wasn't re-rendering when map was mutated
+    - Timing confirmed: tasks stored AFTER initial render, but no reactivity trigger
+- **Solution**: Use `SvelteMap` from `svelte/reactivity` instead of plain `Map`
+    - `SvelteMap` is Svelte's reactive Map implementation that auto-tracks mutations
+    - Changed `const taskInstancesMap = $state(new Map())` to `let taskInstancesMap = new SvelteMap()`
+    - `SvelteMap` is inherently reactive, no `$state()` wrapper needed
+    - Removed all manual reassignments (`taskInstancesMap = new Map(taskInstancesMap)`) - no longer necessary
+- **Changes made**:
+    - `Status.svelte`: Import `SvelteMap` from `svelte/reactivity`
+    - `Status.svelte`: Change `taskInstancesMap` from `$state(new Map())` to `new SvelteMap()`
+    - All `.set()` calls now automatically trigger reactivity
+- **Result**: Task progress now displays correctly in list view
+    - Shows "Tasks: ✓ 0 / 4" with completed count
+    - Shows "0%" completion percentage
+    - Shows tri-color segmented progress bar (green/red/gray)
+    - Updates automatically when tasks complete
+- **Validation**:
+    - `npm run format` ✅
+    - `npm run lint` ✅ (no `svelte/prefer-svelte-reactivity` or `svelte/no-unnecessary-state-wrap` errors)
+    - `npm run check` ✅
+    - Browser testing: Task progress displays immediately after API call ✅
+- **Status**: Task progress display fix complete and production-ready ✅
+
+#### Production Readiness Improvements (2026-06-05) ✅
+
+- **Goal**: Prepare workflow monitoring for production by removing dev-only features and improving UX
+- **Changes made**:
+    1. **Removed mock data system** (dev-only feature no longer needed):
+        - Removed mock data imports from `Status.svelte` and `StatusDetail.svelte`
+        - Removed `useMockData` prop and bindable state from all components
+        - Removed `loadMockData()`, `clearMockData()`, `toggleMockData()` functions
+        - Removed mock toggle button from UI (was shown only in dev mode on localhost)
+        - Removed `isDev` check and related logic
+        - All components now use real API exclusively
+    2. **Changed auto-refresh interval**:
+        - Increased from 10 seconds to 30 seconds for list view (less aggressive polling)
+        - Detail view remains at 5 seconds (more frequent updates for active workflow)
+        - Updated subtitle text: "Running workflows refresh automatically every 30 seconds"
+    3. **Added manual refresh button**:
+        - Grey bubble button design (subtle, not distracting)
+        - Positioned to left of "Submit Workflow" button
+        - Icon: circular arrow refresh icon
+        - Shows loading state during refresh:
+            - Button disabled while refreshing
+            - Text changes from "Refresh" to "Refreshing..."
+            - Icon animates with spin animation
+        - Provides visual feedback for both manual and automatic refreshes
+        - Users can see when refresh is happening (reassuring indicator)
+- **Benefits**:
+    - Cleaner production code without dev-only mock data complexity
+    - More reasonable API polling rate (30s vs 10s)
+    - Better user control and feedback for refresh operations
+    - Improved UX with visible refresh indicator
+- **Validation**:
+    - `npm run format` ✅
+    - `npm run lint` ✅
+    - `npm run check` ✅
+    - Browser testing:
+        - Mock toggle button removed ✅
+        - Refresh button visible and functional ✅
+        - Loading state displays correctly (disabled + "Refreshing..." + spin) ✅
+        - Subtitle shows "30 seconds" ✅
+        - Real API calls working ✅
+- **Status**: Production readiness improvements complete ✅
+
+#### Browser History Navigation (2026-06-05) ✅
+
+- **Goal**: Enable browser back/forward buttons to work naturally when navigating between tabs and workflow views
+- **Problem**: All navigation was client-side state changes without URL updates, so back button didn't work
+- **Solution**: Integrate SvelteKit's `goto()` and URL query parameters
+    - Import `goto` from `$app/navigation`, `page` from `$app/stores`, `resolve` from `$app/paths`
+    - Subscribe to `page.url.searchParams` on mount to restore state from URL
+    - Call `goto(resolve('/?tab=...'), { replaceState: false })` on every navigation action
+    - Use `replaceState: false` to add entries to browser history (enables back button)
+    - Type query strings as `as \`/?${string}\`` to satisfy SvelteKit's route typing
+- **URL patterns**:
+    - Upload tab: `/?tab=upload`
+    - Workflows list: `/?tab=workflows`
+    - Workflows submit: `/?tab=workflows&view=submit`
+    - Workflows detail: `/?tab=workflows&view=detail&dagId=...&dagRunId=...`
+    - Report tab: `/?tab=report`
+- **Changes made**:
+    - `+page.svelte`: Added `onMount` subscription to sync URL params to component state
+    - `+page.svelte`: Updated all navigation functions to call `goto()` with query params
+    - `onSelect()`: Tab switching updates URL
+    - `handleSelectRun()`: Detail view updates URL with dagId and dagRunId
+    - `handleBackToList()`: List view updates URL
+    - `handleNavigateToSubmit()`: Submit view updates URL
+- **Button sizing improvements**:
+    - Changed "Submit Workflow" button text to "Submit" (clearer in context of Workflows page)
+    - Matched button sizing: both Refresh and Submit buttons use `px-3 py-2 text-sm` (same height: 38.76px)
+    - Both buttons now visually balanced and consistent
+- **Back button behavior**:
+    - ✅ Upload tab → Workflows tab → Back → Upload tab
+    - ✅ Workflows list → Submit view → Back → Workflows list
+    - ✅ Workflows list → Detail view → Back → Workflows list
+    - ✅ Detail view → Submit view → Back → Detail view (any navigation sequence)
+- **Validation**:
+    - `npm run format` ✅
+    - `npm run lint` ✅ (all `goto()` calls use `resolve()`)
+    - `npm run check` ✅
+    - Browser testing:
+        - Back button navigation works correctly ✅
+        - Forward button works ✅
+        - Page refresh restores state from URL ✅
+        - Direct URL access works ✅
+        - Button sizes match (38.76px height) ✅
+        - "Submit" button label is concise ✅
+- **Status**: Browser history navigation complete and production-ready ✅
+
+#### Workflow Submission Configuration Display (2026-06-05) ✅
+
+- **Goal**: Display the exact parameters used when submitting a workflow in the detail view, so users can review what configuration was used
+- **UX rationale**: Users need to see what parameters were submitted, especially after workflow completes or fails, to understand what configuration was used
+- **Implementation approach**:
+    1. **Extend storage to include submission config**:
+        - Added `SubmissionConfig` type to `workflowRunsStorage.ts`
+        - Contains workflow name and array of stages with their options
+        - Each stage includes: stageId, stageName, pipelineName, pipelineVersion, options
+        - Added as optional `submissionConfig` field on `StoredWorkflowRun`
+    2. **Capture config during submission** (`Submit.svelte`):
+        - Build `SubmissionConfig` object from workflow and profile data
+        - Extract stage information from `workflowProfiles` array
+        - Copy options from `workflowOptions` state
+        - Store in cookie alongside dagId, dagRunId, submittedAt
+    3. **Display config in detail view** (`StatusDetail.svelte`):
+        - Load stored runs from cookie on mount
+        - Match by dagId and dagRunId
+        - Display "Workflow Submission Details" section at bottom of page
+        - Use accordion style matching Submit page (same design language)
+        - Each stage is a collapsible `<details>` element with chevron icon
+        - Shows stage number, name, and parameter count
+        - Parameters displayed in read-only format (grey background, monospace font)
+- **Visual design**:
+    - Section title: "Workflow Submission Details"
+    - Overview text shows total stage count
+    - Each stage minimized by default (can expand to see parameters)
+    - Accordion chevron rotates when expanded (same CSS as Submit page)
+    - Parameters shown as key-value pairs in monospace font
+    - Objects/arrays displayed as JSON strings
+    - Clean separation from task instances table above
+- **Benefits**:
+    - Users can review submission configuration after workflow completes
+    - Helpful for debugging failed workflows (see exact parameters used)
+    - Provides audit trail of submitted configurations
+    - No need to remember what was submitted
+    - Matches Submit page UI for consistency
+- **Validation**:
+    - `npm run format` ✅
+    - `npm run lint` ✅
+    - `npm run check` ✅ (zero errors)
+    - Implementation verified: accordion styling matches Submit page ✅
+- **Limitations**:
+    - Only workflows submitted after this change have submission config
+    - Old workflows won't show "Workflow Submission Details" section
+    - Cookie storage has size limits (works for normal workflows, might fail for huge configs)
+- **Status**: Workflow submission configuration display complete and production-ready ✅
+
+#### Bug Fix: Empty Workflow Submission Details (2026-06-05) ✅
+
+- **Problem**: After submitting a workflow, the detail view showed "Workflow Submission Details" section but with empty stages (no parameter values)
+- **Root cause**: `stageId` mismatch between storing options and retrieving them
+    - When setting options: `stageId = profile.pipelineId ?? profile.pipelineName`
+    - When retrieving for storage: `stageId = "${profile.pipelineName}_${profile.version}".replace(...)` (custom derived string)
+    - These didn't match, so `workflowOptions[stageId]` always returned `undefined`
+- **Investigation**:
+    - Cookie storage was working correctly (verified `submissionConfig` present in cookie)
+    - Display logic was correct (accordion rendering properly)
+    - Issue was in `Submit.svelte` line 395-397: wrong `stageId` derivation
+- **Fix**: Changed submission config builder to use same `stageId` derivation as rest of component
+    - Changed from: `const stageId = "${profile.pipelineName}_${profile.version}".replace(...)`
+    - Changed to: `const stageId = profile.pipelineId ?? profile.pipelineName`
+    - Now matches the keys in `workflowOptions` state
+- **Impact**: Users can now see the actual parameters they submitted when viewing workflow details
+- **Validation**:
+    - `npm run format` ✅
+    - `npm run lint` ✅
+    - `npm run check` ✅ (zero errors)
+    - Verified cookie contains `submissionConfig` with populated `options` objects ✅
+- **Status**: Bug fixed and production-ready ✅
+
+#### Detail View Refresh Button and Auto-Refresh Interval Update (2026-06-05) ✅
+
+- **Goal**: Add manual refresh button to detail view matching the list view design, update auto-refresh to 30 seconds, and show auto-refresh indicator
+- **UX rationale**: Users should have consistent refresh controls across list and detail views, with clear indication of auto-refresh behavior
+- **Changes made** (`StatusDetail.svelte`):
+    1. **Added `isRefreshing` state**: Tracks refresh state for both manual and auto refresh
+    2. **Changed auto-refresh interval**: From 5 seconds to 30 seconds (matches list view)
+    3. **Updated `fetchData()` function**: Sets `isRefreshing` state before/after fetch
+    4. **Added `handleManualRefresh()` function**: Calls `fetchData()` when user clicks refresh
+    5. **Added manual refresh button**:
+        - Grey bubble design matching list view
+        - Positioned left of Halt/Clear button in header
+        - Shows "Refresh" when idle, "Refreshing..." when loading
+        - Icon animates with spin during refresh
+        - Button disabled during refresh (prevents concurrent requests)
+    6. **Added auto-refresh text**: Shows "Automatically refreshes every 30 seconds while running" for running/queued workflows
+- **Visual design**:
+    - Refresh button matches list view style (same grey background, padding, hover states)
+    - Icon spins during both manual and automatic refresh
+    - Button text changes to "Refreshing..." with disabled state
+    - Auto-refresh text appears as subtitle below workflow title
+    - Only shows auto-refresh text for running/queued workflows (completed workflows show Run ID instead)
+- **Benefits**:
+    - Consistent UX across list and detail views
+    - Users can manually trigger refresh without waiting for auto-refresh
+    - Clear visual feedback for refresh state
+    - Less aggressive auto-refresh (30s instead of 5s)
+    - Prevents accidental double-refreshes with disabled state
+- **Validation**:
+    - `npm run format` ✅
+    - `npm run lint` ✅
+    - `npm run check` ✅ (zero errors)
+    - Browser testing:
+        - Refresh button visible in detail view ✅
+        - Button shows "Refreshing..." and spins during refresh ✅
+        - Button disabled during refresh ✅
+        - Button re-enables after refresh completes ✅
+        - Auto-refresh text shows "every 30 seconds while running" ✅
+        - Auto-refresh triggers every 30 seconds ✅
+- **Status**: Detail view refresh enhancements complete and production-ready ✅
+
+#### Simplified Detail View Header (2026-06-05) ✅
+
+- **Goal**: Remove redundant large heading from detail view and add compact auto-refresh indicator
+- **Problem**: Detail view had large redundant h2 heading showing workflow name (e.g., "bactopia_kraken2_v3_2_0") that duplicated the card title below, wasting vertical space
+- **Solution**: Removed redundant heading section (lines 207-220) and added compact "Auto-refreshes every 30s" indicator to the right of Back button
+- **Changes made** (`StatusDetail.svelte`):
+    - Removed entire heading block with workflow name and subtitle
+    - Added small text indicator: "Auto-refreshes every 30s"
+    - Positioned indicator to left of refresh button in header
+    - Only shows for running/queued workflows (hidden for completed workflows)
+    - Uses text-xs with gray color for subtle appearance
+- **Visual result**:
+    - Clean header with just: Back button | "Auto-refreshes every 30s" | Refresh button | Halt button
+    - Workflow name appears once in the card (not twice)
+    - Much more vertical space for actual workflow data
+    - Compact auto-refresh indicator provides context without dominating
+- **Benefits**:
+    - Eliminates redundant information (workflow name was shown twice)
+    - More screen real estate for task instances table
+    - Cleaner, more focused UI
+    - Auto-refresh behavior still communicated clearly with compact text
+- **Validation**:
+    - `npm run lint` ✅
+    - Browser testing:
+        - Redundant heading removed ✅
+        - Compact "Auto-refreshes every 30s" indicator visible ✅
+        - Indicator only shows for running/queued workflows ✅
+        - Workflow name appears once in card (not duplicated) ✅
+- **Status**: Simplified detail view header complete and production-ready ✅
+
+#### Workflow Status Monitoring Implementation (2026-06-05) ✅
+
+- **Goal**: Build complete workflow status tracking system for users to monitor submitted workflows
+- **Implementation scope**: Cookie storage, reactive state, API client, three UI views (list, detail, halt modal), UX enhancements, mock data support
+- **Components created**:
+    - `src/lib/workflowStatus.ts`: API client with 4 endpoints (getWorkflowRun, getTaskInstances, getWorkflowTasks, haltWorkflow)
+    - `src/lib/workflowRunsStorage.ts`: Cookie-based persistence (90-day retention, 5 functions)
+    - `src/lib/workflowRuns.svelte.ts`: Reactive state management using SvelteMap (7 functions)
+    - `src/lib/components/Status/Status.svelte`: List view with auto-refresh every 10s, mock data toggle (dev only)
+    - `src/lib/components/Status/StatusDetail.svelte`: Detail view with task instances table, auto-refresh every 5s, mock data support
+    - `src/lib/components/Status/WorkflowRunCard.svelte`: Individual workflow card with enhanced UX
+    - `src/lib/components/Status/HaltWorkflowModal.svelte`: Confirmation modal with optional note field
+    - `src/lib/mockWorkflowData.ts`: Comprehensive mock data (4 workflows, 3 task sets, example responses)
+- **Integration points**:
+    - Updated `Submit.svelte` to store workflow runs on successful submission (imports `addWorkflowRun`, `addStoredRun`)
+    - Added Status tab to main navigation in `+page.svelte` (4th tab after Upload/Submit/Report)
+    - Integrated list/detail view routing and halt modal state management
+    - Mock data mode shared between Status list and detail views via bindable prop
+- **Design improvements** (from @designer consultation):
+    - High-contrast professional state colors (indigo/emerald/rose) with icons for accessibility
+    - Tri-color segmented progress bar (green for completed, red for failed, gray for pending)
+    - Left border accent for workflows needing attention (red for failures)
+    - Enhanced empty state with icon, heading, "Submit Your First Workflow" button
+    - Staggered card animations (50ms delay per card)
+    - Hover effects, transitions, focus rings for accessibility
+    - Auto-refresh indicator shows "updating..." vs "10s"
+    - Large percentage display next to task counts
+    - Monospace font for timestamps, proper aria-labels throughout
+- **UX enhancements** (final polish):
+    - **Submit Workflow button**: Floating action button in header with plus icon, navigates to Submit tab
+    - **Empty state**: Updated with direct call-to-action button linking to Submit page
+    - **Unavailable workflows section**: Collapsible section with count badge, "Clear All" button
+    - **Auto-pruning**: Unavailable workflows automatically removed after 30 days
+    - **Mock data toggle**: Dev-only button (🎭 Mock ON/OFF) for visual testing without API calls
+    - **Clean API behavior**: Mock mode prevents all API calls and polling intervals
+- **Testing**:
+    - Unit tests for storage utilities (`workflowRunsStorage.test.ts`): 12 tests covering parse/write/add/remove/clear with edge cases
+    - Unit tests for reactive state (`workflowRuns.svelte.test.ts`): 7 tests covering stored array updates, live status map, duplicate prevention
+    - All 40 tests pass ✅
+    - **Comprehensive browser testing with mock data**:
+        - List view displays 4 workflows (running, queued, success, failed) with correct colors and progress bars ✅
+        - Detail view shows task instances table with 5 tasks in various states ✅
+        - Halt Workflow modal displays with warning text and optional note field ✅
+        - Submit Workflow button navigation works correctly ✅
+        - Unavailable workflows section collapses/expands correctly ✅
+        - Mock data toggle enables/disables without API calls ✅
+        - **Zero console errors** when using mock data (only expected CORS errors from initial cookie workflow before mock mode enabled) ✅
+- **Documentation updates**:
+    - `notes/04-data-types.md`: Added 8 new types (WorkflowRunState, WorkflowRun, TaskInstance, StoredWorkflowRun, WorkflowRunStatus, TaskInstancesResponse, WorkflowTask)
+    - `notes/03-api-endpoints.md`: Added 4 workflow status endpoints (GET /workflows/run, GET /workflows/run/taskinstances, GET /workflows/tasks, PATCH /workflows/halt) with full request/response examples
+    - `notes/02-architecture.md`: Added "Workflow Status Monitoring Flow" section, updated state management to include workflowRuns and cookie persistence
+- **Validation**:
+    - `npm run format` ✅
+    - `npm run lint` ✅
+    - `npm run check` ✅ (zero errors, zero warnings)
+    - All tests pass ✅
+- **Browser verification** (comprehensive final test):
+    - Status tab renders correctly in navigation ✅
+    - Empty state shows "Submit Your First Workflow" button ✅
+    - Mock data toggle works (dev mode only) ✅
+    - List view displays all workflow states with correct styling ✅
+    - Detail view shows complete task instances table ✅
+    - Halt modal displays with confirmation and note field ✅
+    - Submit Workflow button navigates to Submit tab ✅
+    - Unavailable workflows section collapses/expands ✅
+    - **Console is clean** - zero errors/warnings with mock data ✅
+- **Status**: Workflow status monitoring feature **fully polished, comprehensively tested, and production-ready** ✅✅✅
+
+#### Documentation, Workflow Improvements, and Tests (2026-06-05) ✅
 
 - **Enhanced AGENTS.md for AI agents**:
     - Added "Dev Server Management for AI Agents" section with best practices
@@ -89,6 +480,27 @@ Maintenance" section for full guidelines.
     - Should return `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`
     - OPTIONS requests should not require authentication (preflight happens before auth headers sent)
 - **Status**: Frontend implementation complete ✅ | Backend CORS configuration required ⏳
+
+#### Workflow Run Storage and State Tests (2026-06-05) ✅
+
+- **Goal**: Add unit tests for workflow run cookie storage utilities and reactive state helpers
+- **Storage tests** (`src/lib/workflowRunsStorage.test.ts`):
+    - Covered `getStoredWorkflowRuns()` for missing cookie, invalid JSON, non-array, and structurally invalid entries
+    - Verified `setStoredWorkflowRuns()` writes encoded JSON with 90-day `max-age`, `path=/`, and `SameSite=Strict`
+    - Tested `addWorkflowRun()` prepends new runs and avoids duplicates based on `dagId` + `dagRunId`
+    - Tested `removeWorkflowRun()` removes a specific run and is a no-op when the target does not exist
+    - Tested `clearAllWorkflowRuns()` sets cookie with `max-age=0` for clearing
+    - Implemented minimal `document.cookie` stub that overwrites `workflow_runs` cookie while appending others, to keep parsing predictable
+- **Reactive state tests** (`src/lib/workflowRuns.svelte.test.ts`):
+    - Covered `getRunKey()` composite key behavior
+    - Verified `setStoredRuns()` replaces the stored array and handles empty arrays
+    - Verified `addStoredRun()` prepends new runs and prevents duplicates
+    - Verified `removeStoredRun()` removes matching runs and is a no-op for non-existent keys
+    - Verified `setLiveStatus()` inserts and replaces entries in `SvelteMap` and that `getLiveStatus()` returns the correct status or `undefined`
+    - Verified `clearLiveStatus()` resets the map to empty
+- **Notes**:
+    - Because `workflowRuns` is module-level `$state`, tests must reset both `stored` and `liveStatus` in `beforeEach` to avoid bleed-through
+    - Storage tests run in the server workspace (node environment) and provide their own `document` stub; Svelte state tests run in the client workspace
 
 #### Workflow Payload Wrapper for Airflow API (2026-06-05) ✅
 
@@ -449,13 +861,13 @@ selectedWorkflowDagId (state)
 1. **[RESOLVED] No client-side validation** - Implemented with AJV + visual error feedback ✅
 2. **[RESOLVED] Workflow submission blocked by CORS** - Backend resolved 2026-06-05 ✅
 3. **No form state persistence** - values lost on refresh
-4. **No job tracking** - submit and forget, no status monitoring
+4. **[RESOLVED] Workflow job tracking** - Workflow runs are stored and monitored in the Workflows page ✅
 5. **Report ID hardcoded** - `"bactopia-single-sample-analysis"` not user-configurable
 6. **No error recovery for partial uploads** - abort on any error
 
 ### Missing Features (API exists but UI doesn't expose)
 
-1. **Workflow status monitoring** - After submission, no tracking of execution
+1. **[RESOLVED] Workflow status monitoring** - Implemented in the Workflows page ✅
 2. **Pipeline logs** - `/dap/logs` endpoint unused
 3. **Pipeline status** - `/dap/status` endpoint unused
 4. **Storage browsing** - `/objstorage/contents` unused
@@ -528,8 +940,8 @@ Two workspaces:
 
 ### Future Enhancements
 
-- [ ] Workflow status monitoring after submission
-- [ ] Real-time workflow execution tracking
+- [x] Workflow status monitoring after submission ✅
+- [x] Workflow execution tracking with 30-second polling ✅
 - [ ] Pipeline logs viewer (leverage `/dap/logs`)
 - [ ] Storage browser (leverage `/objstorage/contents`, `/objstorage/crawler`)
 - [ ] User profile management (leverage `/user/attribute[s]`)
@@ -589,7 +1001,9 @@ node -e "const axios=require('axios');const https=require('https');(async()=>{co
 ### Key Files to Read First
 
 - `src/lib/components/Submit/Submit.svelte` - Schema-driven form generation
-- `src/lib/pipeline.ts` - API client and validation (unused validation!)
+- `src/lib/components/Status/Status.svelte` - Workflow list, status polling, and refresh behavior
+- `src/lib/components/Status/StatusDetail.svelte` - Workflow detail, task table, halt/clear controls
+- `src/lib/pipeline.ts` - Workflow API client for DAGs and pipeline profiles
 - `src/lib/mpu.ts` - Multipart upload implementation
 - `notes/README.md` - Documentation index
 
@@ -597,7 +1011,7 @@ node -e "const axios=require('axios');const https=require('https');(async()=>{co
 
 - Understanding complete application flow (done)
 - Identifying used vs unused API endpoints (done)
-- Next: Likely implementing validation or exposing more API features
+- Next: Form state persistence, report configurability, upload recovery, or backend-backed workflow history
 
 ### Questions to Ask User
 

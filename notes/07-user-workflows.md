@@ -82,59 +82,90 @@
 
 ---
 
-## Workflow 3: Previewing a Workflow Submission
+## Workflow 3: Submitting and Monitoring a Workflow
 
-**Goal**: User configures a workflow and verifies the ordered trigger payload before
-backend submission is enabled.
+**Goal**: User configures a workflow, submits it, and monitors its execution
 
-**Prerequisites**: User is authenticated, has uploaded data needed by the selected
-workflow.
+**Prerequisites**: User is authenticated, has uploaded data needed by the selected workflow
 
 **Steps**:
 
-1. User navigates to Submit tab
-2. User sees workflow selection and a disabled Submit button
-3. User selects a workflow from the dropdown:
+1. User navigates to Workflows tab (consolidated navigation)
+2. User sees list of previously submitted workflows (if any)
+3. User clicks "Submit" button to open inline submission form
+4. User selects a workflow from the dropdown:
     - Dropdown is populated from `GET /workflows`
-    - Paused workflows are visible but disabled
-4. Frontend clears any previous stage forms immediately and fetches:
+    - Displays human-readable workflow names
+5. Frontend fetches workflow profiles:
     - `GET /workflows/pipelineprofiles?dagId={dagId}`
-5. Stage forms appear in the same order returned by the API:
-    - One form per pipeline profile
+    - One profile per stage in the workflow
+6. Stage forms appear as accordions (one per profile):
     - Required fields marked with an asterisk
-    - Readonly system-managed fields shown as inspectable readonly values
-6. User fills in parameters:
+    - Default values pre-filled
+    - Fields generated from JSON Schema
+7. User fills in parameters for each stage:
     - Text inputs for strings
-    - Text inputs with numeric input mode for integers/numbers so invalid values can be
-      explained by validation
+    - Number inputs for integers/numbers
     - Checkboxes for booleans
     - Dropdowns for enum fields
-    - Readonly fields for `const` values
-7. User optionally expands the advanced preview to inspect the ordered JSON payload
-8. User clicks Submit
-9. Frontend validates every stage against its JSON Schema:
-    - Valid -> Preview-only alert displays the serialized ordered array payload
-    - Invalid -> Inline field errors and stage error counts are shown
-10. User corrects field values; field errors clear as edited
+8. User clicks "Submit Workflow" button
+9. Frontend validates all stages against JSON Schema:
+    - Valid → POST to `/workflows/trigger?dagId={dagId}`
+    - Invalid → Error toast with validation message
+10. Workflow submitted successfully:
+    - Submit button shows "Submitting..." with a spinner while the request is pending
+    - Submit button is disabled during the pending request to prevent duplicate submissions
+    - Response includes `dag_run_id` and `dag_id`
+    - Workflow run stored in browser cookie with submission config
+    - User automatically navigated to detail view
+11. User sees detail view with:
+    - Workflow summary (Run ID, State, Times, Duration)
+    - Task Instances table showing all tasks
+    - Workflow Submission Details accordion showing submitted parameters
+    - Auto-refresh indicator: "Auto-refreshes every 30s"
+    - Manual refresh button
+    - Halt button (for running workflows)
+12. Detail view auto-refreshes every 30 seconds while workflow is running
+13. User can manually refresh at any time via refresh button
+14. User clicks "Back to workflow list" to see all workflows
+15. List view shows the newly submitted workflow with:
+    - Workflow name and submission timestamp
+    - Current state badge (e.g., "Running")
+    - Task progress (e.g., "✓ 2 / 5" with progress bar)
+16. List view auto-refreshes every 30 seconds for running workflows
+17. User can click "View details" to return to detail view
+18. When workflow completes:
+    - State updates to "Success" or "Failed"
+    - Auto-refresh stops
+    - Task instances show final states
 
-**Success State**: The user sees a preview-only alert containing the exact workflow
-payload that would be sent to `/workflows/trigger?dagId={dagId}`.
+**Success State**: Workflow submitted and monitored until completion, user can review submission details and task execution
 
 **Error States**:
 
-- No workflow selected -> Submit button disabled
-- Workflow paused -> Workflow option disabled
-- Profile fetch fails -> Error toast and no stage forms remain
-- Pipeline not runnable (`pipelineRunnable: false`) -> Submit disabled for that workflow
-- Schema cannot be rendered safely -> Stage error message and submit blocked
-- Validation fails -> Inline field errors plus stage error counts
+- No workflow selected → Submit button disabled
+- Profile fetch fails → Error toast and no stage forms remain
+- Validation fails → Error toast with field details
+- Submission fails → Error toast with details, workflow not stored
+- Status fetch fails → Error indicator in UI, auto-refresh continues
 
 **Key User Benefits**:
 
-- No need to know pipeline-specific parameters because forms come from backend schemas
-- Clear separation between user-editable fields and system-managed readonly fields
-- Advanced preview confirms the ordered payload without making a backend submission
-- Ordered array payload preserves duplicate pipeline stages in a workflow
+- Dynamic form generation from backend schemas (no hardcoded parameters)
+- Automatic navigation to detail view after submission
+- Real-time monitoring with auto-refresh
+- Manual refresh always available
+- Submission details preserved for review
+- Browser back button works (URL-based navigation)
+- Multiple workflows can be monitored simultaneously
+- Task progress visible at a glance in list view
+
+**Navigation Flow**:
+
+- Workflows tab → Submit (inline form) → Detail view → Back to list
+- Detail view URL: `/?tab=workflows&view=detail&dagId=...&dagRunId=...`
+- Browser back/forward buttons work correctly
+- Direct URL access works (state restored from URL params)
 
 ---
 
@@ -284,7 +315,8 @@ payload that would be sent to `/workflows/trigger?dagId={dagId}`.
 ### Feedback Loops
 
 - Inline validation feedback on Submit form fields
-- Advanced JSON preview in Submit tab
+- Advanced JSON preview in the Workflows submit view
+- Workflow submit button shows a spinner and disables itself while submission is pending
 - Per-chunk progress in file uploads
 - Clear success/error messages
 
@@ -296,7 +328,25 @@ payload that would be sent to `/workflows/trigger?dagId={dagId}`.
 
 ### Navigation
 
-- Three tabs always visible in navbar
+- Three main tabs always visible in navbar: Upload, Workflows, Report
+- Workflows tab has consolidated navigation (no separate Submit tab)
 - Active tab highlighted
-- No page reloads (SPA navigation)
-- Browser back/forward not used (single-page app pattern)
+- Browser back/forward buttons work (URL-based navigation)
+- URL parameters sync navigation state:
+    - Upload: `/?tab=upload`
+    - Workflows list: `/?tab=workflows`
+    - Workflows submit: `/?tab=workflows&view=submit`
+    - Workflows detail: `/?tab=workflows&view=detail&dagId=...&dagRunId=...`
+    - Report: `/?tab=report`
+- Page refresh restores state from URL
+- SPA navigation (no page reloads)
+
+### Workflow Monitoring
+
+- Submitted workflows persist in browser cookie (90-day retention)
+- List view shows all submitted workflows with current state
+- Auto-refresh every 30 seconds for running workflows
+- Manual refresh button available in both list and detail views
+- Task progress visible in list view cards
+- Detail view shows complete task execution history
+- Submission details preserved and reviewable

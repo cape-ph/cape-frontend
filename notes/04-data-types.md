@@ -97,14 +97,16 @@ Ordered workflow trigger payload. Each array item contains the pipeline ID and c
 Nextflow options object for one pipeline profile returned by `/workflows/pipelineprofiles`.
 
 ```typescript
-type WorkflowTriggerRequest = Array<{
-    pipelineId: string;
-    nextflowOptions: Record<string, unknown>;
-}>;
+type WorkflowTriggerRequest = {
+    pipelineConfigs: Array<{
+        pipelineId: string;
+        nextflowOptions: Record<string, unknown>;
+    }>;
+};
 ```
 
-The array order must match the pipeline profile response order. This avoids ambiguity
-when a workflow uses the same pipeline more than once.
+The `pipelineConfigs` array order must match the pipeline profile response order. This
+avoids ambiguity when a workflow uses the same pipeline more than once.
 
 **Used In**: Submit preview serialization and future `/workflows/trigger` calls
 
@@ -383,3 +385,229 @@ HTTP status codes that trigger retry:
 - `>= 500`: Server errors
 - `429`: Too Many Requests
 - `408`: Request Timeout
+
+---
+
+## Workflow Status Types
+
+### WorkflowRunState
+
+Possible workflow run states from Airflow.
+
+```typescript
+type WorkflowRunState =
+    | 'queued'
+    | 'running'
+    | 'success'
+    | 'failed'
+    | 'skipped'
+    | 'upstream_failed'
+    | 'up_for_retry'
+    | 'up_for_reschedule'
+    | 'restarting'
+    | 'deferred'
+    | 'removed';
+```
+
+**Used In**: Workflow run status display, task instance states
+
+---
+
+### WorkflowRun
+
+Complete workflow run information from `GET /workflows/run`.
+
+```typescript
+interface WorkflowRun {
+    dag_run_id: string;
+    dag_id: string;
+    logical_date: string;
+    queued_at: string;
+    start_date: string | null;
+    end_date: string | null;
+    data_interval_start: string;
+    data_interval_end: string;
+    run_after: string;
+    last_scheduling_decision: string | null;
+    run_type: string;
+    state: WorkflowRunState;
+    triggered_by: string;
+    conf: Record<string, unknown>;
+    note?: string;
+    dag_versions: Array<{
+        id: string;
+        version_number: number;
+        dag_id: string;
+        bundle_name: string;
+        created_at: string;
+    }>;
+}
+```
+
+**Used In**: Status list view, status detail view
+
+**Key Fields**:
+
+- `dag_run_id`: Unique run identifier (format: `manual+YYYY-MM-DDTHH:MM:SS+00:00`)
+- `state`: Current workflow state (queued, running, success, failed, etc.)
+- `start_date`, `end_date`: Run timing (null if not started/finished)
+- `note`: Optional user note (e.g., halt reason)
+
+---
+
+### TaskInstance
+
+Individual task execution within a workflow run from `GET /workflows/run/taskinstances`.
+
+```typescript
+interface TaskInstance {
+    id: string;
+    task_id: string;
+    dag_id: string;
+    dag_run_id: string;
+    map_index: number;
+    logical_date: string;
+    run_after: string;
+    start_date: string | null;
+    end_date: string | null;
+    state: TaskInstanceState | null;
+    try_number: number;
+    max_tries: number;
+    task_display_name: string;
+    hostname: string;
+    unixname: string;
+    pool: string;
+    pool_slots: number;
+    queue: string;
+    priority_weight: number;
+    operator: string;
+    queued_when: string | null;
+    scheduled_when: string | null;
+    pid: number | null;
+    executor_config: string;
+    rendered_fields: Record<string, unknown>;
+    dag_version: {
+        id: string;
+        version_number: number;
+        dag_id: string;
+        bundle_name: string;
+        created_at: string;
+    };
+}
+```
+
+**Used In**: Status detail view task table
+
+**Key Fields**:
+
+- `task_display_name`: Human-readable task name
+- `state`: Current task state (uses same values as WorkflowRunState)
+- `try_number`, `max_tries`: Retry tracking
+- `start_date`, `end_date`: Task timing
+
+---
+
+### StoredWorkflowRun
+
+Minimal workflow run data stored in browser cookies.
+
+```typescript
+interface StoredWorkflowRun {
+    dagId: string;
+    dagRunId: string;
+    submittedAt: string; // ISO 8601 timestamp
+    submissionConfig?: SubmissionConfig; // Submitted stage parameters, if captured
+}
+```
+
+**Used In**: Cookie storage, status list view
+
+**Storage Details**:
+
+- Cookie name: `workflow_runs`
+- Max age: 90 days
+- Path: `/`
+- SameSite: `Strict`
+
+---
+
+### WorkflowRunStatus
+
+Live status data for a workflow run with availability tracking.
+
+```typescript
+interface WorkflowRunStatus {
+    run: WorkflowRun | null;
+    isAvailable: boolean; // false if API returned 404 or error
+    lastFetched: number; // timestamp
+    error?: string;
+}
+```
+
+**Used In**: Reactive state management in `workflowRuns.svelte.ts`
+
+**Purpose**: Tracks whether a workflow run can be fetched from the API (may be unavailable if removed or retention period expired)
+
+---
+
+### TaskInstancesResponse
+
+Response envelope for task instances list.
+
+```typescript
+interface TaskInstancesResponse {
+    task_instances: TaskInstance[];
+    total_entries: number;
+}
+```
+
+**Used In**: Status detail view data fetching
+
+---
+
+### WorkflowTask
+
+Task definition metadata from `GET /workflows/tasks`.
+
+```typescript
+interface WorkflowTask {
+    task_id: string;
+    task_display_name: string;
+    owner: string;
+    start_date: string;
+    trigger_rule: string;
+    depends_on_past: boolean;
+    wait_for_downstream: boolean;
+    retries: number;
+    queue: string;
+    pool: string;
+    pool_slots: number;
+    retry_delay: {
+        __type: string;
+        days: number;
+        seconds: number;
+        microseconds: number;
+    };
+    retry_exponential_backoff: boolean;
+    priority_weight: number;
+    weight_rule: string;
+    ui_color: string;
+    ui_fgcolor: string;
+    template_fields: string[];
+    downstream_task_ids: string[];
+    operator_name: string;
+    params: Record<string, unknown>;
+    class_ref: {
+        module_path: string;
+        class_name: string;
+    };
+    is_mapped: boolean;
+    extra_links: unknown[];
+}
+```
+
+**Used In**: Task metadata lookups (available but not currently displayed in UI)
+
+**Note**: Currently not used in the Status page but available for future enhancements
+
+---
