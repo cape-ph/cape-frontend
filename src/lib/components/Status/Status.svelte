@@ -133,9 +133,6 @@
                 const ageMs = now - submittedAt;
 
                 if (ageMs > cutoffMs) {
-                    console.log(
-                        `[Status] Auto-pruning unavailable workflow ${run.dagRunId} (${Math.round(ageMs / (24 * 60 * 60 * 1000))} days old)`
-                    );
                     removeWorkflowRun(run.dagId, run.dagRunId);
                     removeStoredRun(run.dagId, run.dagRunId);
                 }
@@ -153,8 +150,6 @@
             removeWorkflowRun(run.dagId, run.dagRunId);
             removeStoredRun(run.dagId, run.dagRunId);
         });
-
-        console.log(`[Status] Cleared ${unavailableRuns.length} unavailable workflows`);
     }
 
     // Store task instances in a reactive map (SvelteMap auto-tracks mutations)
