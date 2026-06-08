@@ -201,10 +201,10 @@
                 // Prioritize: required > type > minimum/maximum > other
                 const existingError = errorsByField.get(fieldName);
                 if (existingError) {
-                    // Keep the more important error
+                    // Keep the more important error (lower number = higher priority)
                     const existingPriority = getErrorPriority(existingError.message);
                     const newPriority = getErrorPriority(err.keyword);
-                    if (newPriority <= existingPriority) {
+                    if (newPriority >= existingPriority) {
                         continue; // Keep existing error, skip this one
                     }
                 }
