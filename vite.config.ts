@@ -5,8 +5,13 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
     plugins: [tailwindcss(), sveltekit()],
+    server: {
+        watch: {
+            ignored: ['**/.lcm/**']
+        }
+    },
     test: {
-        workspace: [
+        projects: [
             {
                 extends: './vite.config.ts',
                 plugins: [svelteTesting()],

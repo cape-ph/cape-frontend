@@ -15,6 +15,7 @@
         { key: 'submit', label: 'Submit' },
         { key: 'report', label: 'Report' }
     ];
+    const apiBase = 'https://api.cape-dev.org/capi-dev';
 
     function onSelect(key: string) {
         activeKey = key;
@@ -24,27 +25,21 @@
 {#if auth.user}
     <Navbar {logo} user={auth.user} {links} {activeKey} {onSelect} />
     <main>
-        <div class="mt-8 flex h-screen justify-center">
+        <div class="mx-auto mt-8 flex min-h-screen w-full max-w-4xl justify-center px-4">
             {#if activeKey === 'upload'}
-                <div class="w-lg">
+                <div class="w-full max-w-lg">
                     <FileUpload
-                        baseUrl="https://api.cape-dev.org/capi-dev"
+                        baseUrl={apiBase}
                         bucket="ccd-dlh-t-seqauto-input-raw-vbkt-s3-b8fded5"
                     />
                 </div>
             {:else if activeKey === 'submit'}
-                <div class="w-lg">
-                    <Submit
-                        baseUrl="https://api.cape-dev.org/capi-dev"
-                        bucketURI="s3://ccd-dlh-t-seqauto-result-raw-vbkt-s3-1e80821/pipeline-output"
-                    />
+                <div class="w-full max-w-3xl">
+                    <Submit baseUrl={apiBase} />
                 </div>
             {:else if activeKey === 'report'}
-                <div>
-                    <Report
-                        baseUrl="https://api.cape-dev.org/capi-dev"
-                        reportId="bactopia-single-sample-analysis"
-                    />
+                <div class="w-full max-w-lg">
+                    <Report baseUrl={apiBase} reportId="bactopia-single-sample-analysis" />
                 </div>
             {/if}
         </div>

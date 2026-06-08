@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { goto } from '$app/navigation';
+    import { resolve } from '$app/paths';
     import { userManager } from '$lib/cognito';
     import { setUser } from '$lib/user.svelte';
 
@@ -14,7 +15,7 @@
         } catch (err) {
             console.error('OIDC callback failed', err);
         } finally {
-            goto('/', { replaceState: true });
+            goto(resolve('/'), { replaceState: true });
         }
     });
 </script>

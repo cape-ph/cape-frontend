@@ -112,7 +112,7 @@
         const pack = tarPack(meta, components);
         const stream = chunkStream(pack, chunkSize);
 
-        const onProgress: OnProgress = (bytesSent, totalBytes, ctx) => {
+        const onProgress: OnProgress = (bytesSent, totalBytes) => {
             upload.bytesSent = bytesSent;
             upload.totalBytes = totalBytes;
         };
@@ -131,8 +131,8 @@
                     title: `Upload ${filename} completed.`
                 });
             }
-        } catch (err: any) {
-            if (err?.name === 'CanceledError') {
+        } catch (err: unknown) {
+            if (err && typeof err === 'object' && 'name' in err && err.name === 'CanceledError') {
                 toaster.info({
                     title: `Upload ${filename} canceled.`
                 });
@@ -156,54 +156,73 @@
     }
 </script>
 
-<div class="mb-4 space-y-2">
-    <h2 class="text-primary-500 text-2xl font-semibold">File Upload</h2>
+<div class="mb-5 space-y-2">
+    <h2 class="text-primary-700 dark:text-primary-300 text-2xl font-semibold">File Upload</h2>
+    <p class="text-sm text-gray-700 dark:text-gray-300">
+        Add sample metadata and attach FASTQ files for upload.
+    </p>
 </div>
 
-<div class="space-y-6">
+<div class="space-y-6 text-gray-950 dark:text-gray-100">
     <section class="space-y-3">
         <h2 class="text-lg font-semibold">Metadata</h2>
         <div class="grid grid-cols-1 gap-3">
             <label class="flex flex-col gap-1">
-                <span class="text-xs opacity-70">sampleId</span>
+                <span class="text-xs font-medium text-gray-700 dark:text-gray-300">sampleId</span>
                 <input
-                    class="input input-bordered"
+                    id="sample-id"
+                    name="sample-id"
+                    class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100"
                     type="text"
                     bind:value={sampleId}
                     aria-label="Sample ID"
                 />
             </label>
             <label class="flex flex-col gap-1">
-                <span class="text-xs opacity-70">sampleType</span>
+                <span class="text-xs font-medium text-gray-700 dark:text-gray-300">sampleType</span>
                 <input
-                    class="input input-bordered"
+                    id="sample-type"
+                    name="sample-type"
+                    class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100"
                     type="text"
                     bind:value={sampleType}
                     aria-label="Sample Type"
                 />
             </label>
             <label class="flex flex-col gap-1">
-                <span class="text-xs opacity-70">sampleMatrix</span>
+                <span class="text-xs font-medium text-gray-700 dark:text-gray-300"
+                    >sampleMatrix</span
+                >
                 <input
-                    class="input input-bordered"
+                    id="sample-matrix"
+                    name="sample-matrix"
+                    class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100"
                     type="text"
                     bind:value={sampleMatrix}
                     aria-label="Sample Matrix"
                 />
             </label>
             <label class="flex flex-col gap-1">
-                <span class="text-xs opacity-70">sampleCollectionLocation</span>
+                <span class="text-xs font-medium text-gray-700 dark:text-gray-300"
+                    >sampleCollectionLocation</span
+                >
                 <input
-                    class="input input-bordered"
+                    id="sample-collection-location"
+                    name="sample-collection-location"
+                    class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100"
                     type="text"
                     bind:value={sampleCollectionLocation}
                     aria-label="Sample Collection Location"
                 />
             </label>
             <label class="flex flex-col gap-1">
-                <span class="text-xs opacity-70">sampleCollectionDate</span>
+                <span class="text-xs font-medium text-gray-700 dark:text-gray-300"
+                    >sampleCollectionDate</span
+                >
                 <input
-                    class="input input-bordered"
+                    id="sample-collection-date"
+                    name="sample-collection-date"
+                    class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100"
                     type="date"
                     value={fmtDate(sampleCollectionDate)}
                     oninput={(e) =>
@@ -235,12 +254,14 @@
         </FileUpload>
         <FileUploadProgress {filename} {upload} />
 
-        {#if upload.state === 'pending'}
-            <button class={buttonCss} onclick={onUpload}>Upload</button>
-        {:else if upload.state === 'uploading'}
-            <button class={buttonCss} onclick={onCancel}>Cancel</button>
-        {:else if upload.state === 'complete'}
-            <button class={buttonDoneCss}>Upload complete</button>
-        {/if}
+        <div class="pb-8 sm:pb-10">
+            {#if upload.state === 'pending'}
+                <button class={buttonCss} onclick={onUpload}>Upload</button>
+            {:else if upload.state === 'uploading'}
+                <button class={buttonCss} onclick={onCancel}>Cancel</button>
+            {:else if upload.state === 'complete'}
+                <button class={buttonDoneCss}>Upload complete</button>
+            {/if}
+        </div>
     </section>
 </div>
