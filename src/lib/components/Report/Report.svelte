@@ -1,6 +1,6 @@
 <script lang="ts">
     import { toaster } from '$lib/toaster';
-    import axios from 'axios';
+    import axios, { type CancelTokenSource } from 'axios';
 
     const {
         baseUrl,
@@ -12,32 +12,67 @@
 
     let sampleId = $state('');
     let html = $state('');
-    let loading = $state(false);
+    let submittedSampleId = $state<string | null>(null);
+    let activeRequest:
+        | {
+              key: number;
+              cancelSource: CancelTokenSource;
+          }
+        | undefined = undefined;
+    let requestSequence = 0;
+
+    const isLoadingSubmittedSample = $derived(
+        submittedSampleId !== null && sampleId.trim() === submittedSampleId
+    );
+    const canLoad = $derived(sampleId.trim().length > 0 && !isLoadingSubmittedSample);
+    const buttonText = $derived(isLoadingSubmittedSample ? 'Loading Report...' : 'Load Report');
 
     async function onLoad() {
-        if (sampleId.length === 0) {
+        const targetSampleId = sampleId.trim();
+
+        if (targetSampleId.length === 0) {
             toaster.error({
                 title: 'Missing a sample id.'
             });
             return;
         }
 
+        if (activeRequest) {
+            activeRequest.cancelSource.cancel('New request initiated');
+        }
+
         html = '';
-        loading = true;
+        const requestKey = ++requestSequence;
+        const currentCancelSource = axios.CancelToken.source();
+
+        activeRequest = {
+            key: requestKey,
+            cancelSource: currentCancelSource
+        };
+        submittedSampleId = targetSampleId;
 
         try {
             const result = await axios.get(`${baseUrl}/report/create`, {
                 params: {
                     format: 'html',
                     reportId: reportId,
-                    sampleId: sampleId
+                    sampleId: targetSampleId
                 },
                 responseType: 'text', // ensure we get raw HTML
-                headers: { Accept: 'text/html' } // optional, helps some servers
+                headers: { Accept: 'text/html' }, // optional, helps some servers
+                cancelToken: currentCancelSource.token
             });
 
-            html = typeof result.data === 'string' ? result.data : String(result.data);
+            if (isActiveRequest(requestKey)) {
+                html = typeof result.data === 'string' ? result.data : String(result.data);
+            }
         } catch (err: unknown) {
+            if (axios.isCancel(err)) {
+                return;
+            }
+            if (!isActiveRequest(requestKey)) {
+                return;
+            }
             const message =
                 err &&
                 typeof err === 'object' &&
@@ -50,8 +85,24 @@
                 description: message
             });
         } finally {
-            loading = false;
+            if (isActiveRequest(requestKey)) {
+                submittedSampleId = null;
+                activeRequest = undefined;
+            }
         }
+    }
+
+    function isActiveRequest(requestKey: number) {
+        return activeRequest?.key === requestKey;
+    }
+
+    function onSampleIdKeydown(event: KeyboardEvent) {
+        if (event.key !== 'Enter' || !canLoad) {
+            return;
+        }
+
+        event.preventDefault();
+        void onLoad();
     }
 </script>
 
@@ -77,23 +128,24 @@
                         class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100"
                         type="text"
                         bind:value={sampleId}
+                        onkeydown={onSampleIdKeydown}
                         aria-label="Sample ID"
                     />
                 </label>
             </div>
-            <button class="btn preset-filled-primary-500 mt-2 rounded-lg shadow-lg" onclick={onLoad}
-                >Load Report</button
+            <button
+                class="btn preset-filled-primary-500 mt-2 rounded-lg shadow-lg"
+                onclick={onLoad}
+                disabled={!canLoad}
             >
+                {buttonText}
+            </button>
         </section>
     </div>
 </div>
 
-{#if loading}
-    <div class="w-full">
-        <p class="mt-3 text-sm text-gray-700 dark:text-gray-300">Loading...</p>
-    </div>
-{:else if html}
-    <div class="w-full pb-8 sm:pb-10">
+{#if html}
+    <div class="w-full max-w-full pb-8 sm:pb-10">
         <iframe
             title="Embedded Report"
             srcdoc={html}

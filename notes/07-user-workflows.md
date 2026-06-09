@@ -180,19 +180,28 @@
 1. User navigates to Report tab
 2. User sees report viewer interface with:
     - Sample ID input field
-    - "Load Report" button
+    - "Load Report" button (enabled when input has text)
     - Empty iframe placeholder
 3. User enters sample ID in text input (e.g., "SAMPLE-001")
-4. User clicks "Load Report" button
-5. "Loading..." message appears
+4. User clicks "Load Report" button or presses Enter while focused in the sample ID field
+5. Button text changes to "Loading Report..." and button becomes disabled
 6. Frontend requests report from API:
     - `GET /report/create?sampleId=SAMPLE-001&reportId=bactopia-single-sample-analysis&format=html`
-7. Report HTML returned from API
-8. HTML rendered in sandboxed iframe
-9. User scrolls through report content
-10. User can view charts, tables, text in report
+7. Report generation may take 12-15 seconds to complete
+8. Report HTML returned from API
+9. HTML rendered in sandboxed iframe (full width of available space)
+10. Button returns to "Load Report" text and enabled state
+11. User scrolls through report content in iframe
+12. User can view charts, tables, text in report
 
-**Success State**: Report displayed in iframe, user can review analysis results
+**Alternative: Cancel and Resubmit**:
+
+- While report is loading (button shows "Loading Report..."), user can modify the sample ID input
+- Button becomes enabled again when input changes
+- Clicking button cancels the previous request and starts a new one with the updated sample ID
+- Previous request aborted via axios CancelToken (no error toast shown for cancelled requests)
+
+**Success State**: Report displayed in full-width iframe, user can review analysis results
 
 **Error States**:
 

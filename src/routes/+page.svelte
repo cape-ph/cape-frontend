@@ -172,7 +172,7 @@
                     {/if}
                 </div>
             {:else if activeKey === 'report'}
-                <div class="w-full max-w-lg">
+                <div class="w-full">
                     <Report baseUrl={apiBase} reportId="bactopia-single-sample-analysis" />
                 </div>
             {/if}
