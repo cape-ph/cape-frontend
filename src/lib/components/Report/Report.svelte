@@ -19,7 +19,7 @@
               cancelSource: CancelTokenSource;
           }
         | undefined = undefined;
-    let nextRequestKey = 0;
+    let requestSequence = 0;
 
     const isLoadingSubmittedSample = $derived(
         submittedSampleId !== null && sampleId.trim() === submittedSampleId
@@ -42,10 +42,9 @@
         }
 
         html = '';
-        const requestKey = nextRequestKey + 1;
+        const requestKey = ++requestSequence;
         const currentCancelSource = axios.CancelToken.source();
 
-        nextRequestKey = requestKey;
         activeRequest = {
             key: requestKey,
             cancelSource: currentCancelSource
