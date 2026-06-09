@@ -256,6 +256,8 @@
 **Report Request**:
 
 - Sample ID + Report ID (hardcoded: "bactopia-single-sample-analysis") sent to API
+- Pressing Enter in the sample ID field submits the same request when the Load Report
+  button is available
 - Response format: `text/html`
 - Response rendered directly in iframe
 
@@ -268,10 +270,27 @@
 
 **Loading States**:
 
-- "Loading..." message while fetching
-- "No report loaded yet." when idle
-- Report rendered when available
-- Error toast if fetch fails
+- Button text changes to "Loading Report..." while fetching report (replaces need for separate loading text)
+- Button disabled during API call to prevent duplicate submissions
+- Button re-enabled if user modifies sample ID input (allows cancellation and re-submission)
+- Previous request automatically cancelled when new request submitted
+- "No report loaded yet." displayed when idle (no previous report)
+- Report iframe rendered when HTML received
+- Error toast if fetch fails (cancelled requests do not show error)
+
+**Request Cancellation**:
+
+- Uses axios CancelToken to abort in-flight requests
+- When user modifies input during loading, button becomes enabled
+- Clicking button cancels previous request and starts new one
+- Prevents wasting bandwidth on stale requests
+
+**Responsive Width**:
+
+- Report iframe fills full width of available space
+- No artificial width constraints (previous `max-w-lg` removed)
+- Horizontal scroll only appears if report HTML exceeds viewport width
+- Width dynamically adjusts when browser window resized
 
 **Implementation Files**:
 

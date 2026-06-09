@@ -11,17 +11,107 @@
 
 ### Last Updated
 
-2026-06-06 (Submit loading state added and workflow branch audit cleanup completed)
+2026-06-09 (Report page UX improvements completed)
 
 ### Active Branch
 
-`workflow_status` - Workflow submission, monitoring, and status-detail UX improvements
+`improve_report_page` - Report page loading state and width improvements
 
 ### Recent Work Completed
 
 **IMPORTANT**: When making code changes, always update relevant `notes/*.md` documentation
 files in the same commit to prevent contextual drift. See AGENTS.md "Documentation
 Maintenance" section for full guidelines.
+
+#### Report Page Button Request-State Fix (2026-06-09) ✅
+
+- **Goal**: Fix the Report button workflow so a second request for a changed sample ID
+  immediately shows "Loading Report..." and cannot be reset by a stale cancelled request
+- **Root cause**: The component used shared loading/cancel state. When an older request was
+  cancelled, its `finally` block still cleared `loading` and `cancelSource`, which could
+  incorrectly reset the UI for the newer active request.
+- **Fix**:
+    - Replaced shared loading cleanup with request-scoped `activeRequestKey` checks
+    - Follow-up fix simplified Report request state to a single `activeRequest` object and
+      explicit `submittedSampleId`
+    - Button state now compares the current trimmed input to the submitted sample ID for the
+      active request
+    - Pressing Enter in the sample ID field now uses the same load path when the button is
+      available
+    - Only the current request can write report HTML, show non-cancel errors, or clear
+      the active submitted sample state
+    - Removed temporary Report debug logging
+    - Kept the intended button cycle:
+        1. Submitted sample ID shows disabled "Loading Report..."
+        2. Editing to a different sample ID re-enables "Load Report"
+        3. Clicking again cancels the old request and starts the new loading cycle
+        4. Completed requests return to enabled "Load Report"
+- **Tests added**:
+    - Covered overlapping Report requests with `abcdef` followed by `abcdefghij`
+    - Verified first request cancellation does not clear the second request's loading state
+    - Verified cancelled requests do not show error toasts
+    - Covered Enter key submission from the sample ID field
+- **Validation**:
+    - Focused Report component test passed
+    - Chrome DevTools live browser test passed with bad sample `abcdef` followed by working
+      sample `abcdefghij`
+    - Confirmed final `abcdefghij` report renders in iframe and button returns to clickable
+      "Load Report"
+
+#### Report Page UX Improvements (2026-06-09) ✅
+
+- **Goal**: Improve Report page user experience with loading button state and responsive width
+- **Requested improvements**:
+    1. Button shows "Loading Report..." and is disabled during API call
+    2. Button allows re-submission if input changes (cancels previous request)
+    3. Report iframe width expands to fill available space (no left/right scroll unless necessary)
+    4. Width is dynamic and responsive to browser resizing
+    5. Remove redundant "Loading..." text (button state is sufficient)
+    6. Button text reflects current input state accurately
+- **Changes made**:
+    - **Report.svelte**:
+        - Added `loadingSampleId` state to track what sample is being loaded
+        - Added request-scoped `activeRequestKey` handling so stale requests cannot clear
+          newer loading state or overwrite report HTML
+        - Added `canLoad` derived state (enabled if input not empty and not currently
+          loading that exact input value)
+        - Added `buttonText` derived state based on whether the current input is loading
+        - Added `cancelSource` state for axios CancelToken management
+        - Implemented request cancellation: when new request starts, cancels previous request
+        - Button displays text from `buttonText` derived state
+        - Button disabled when `!canLoad`
+        - Added axios.isCancel() check to suppress error toast for cancelled requests
+        - Added `max-w-full` to iframe container to allow full width
+        - Removed redundant "Loading..." text block
+    - **+page.svelte**:
+        - Removed `max-w-lg` constraint from Report tab container (was limiting width to 32rem)
+        - Changed to `w-full` to allow full available width
+    - **Report.svelte.test.ts**:
+        - Added `mockCancelToken` and `mockCancelTokenSource` to mock setup
+        - Mocked `axios.CancelToken.source()` to return mock token
+        - Mocked `axios.isCancel()` to return false by default
+        - Updated test expectation to include `cancelToken` parameter
+- **Validation**:
+    - `npm run format` ✅ (all files unchanged)
+    - `npm run lint` ✅ (no errors)
+    - `npm run check` ✅ (0 errors, 0 warnings)
+    - `npm run test` ✅ (45 tests passed)
+    - **Browser testing** (complete workflow verified):
+        1. ✅ Enter sample ID → button enabled with "Load Report"
+        2. ✅ Click button → button shows "Loading Report..." (after brief moment for reactivity)
+        3. ✅ Change input during load → button shows "Load Report" and becomes enabled
+        4. ✅ Click again → button shows "Loading Report..." for new sample ID
+        5. ✅ Button text accurately reflects state (loading current value vs. ready to load new value)
+        6. ✅ Request cancellation works correctly
+        7. ✅ Width improvements visible (full-width container, `max-w-full` on iframe)
+- **Technical notes**:
+    - Request-scoped cleanup is required because cancelled requests still run `finally`
+    - Stale request results and stale non-cancel errors are ignored when a newer request
+      is active
+- **Documentation updated**:
+    - `notes/05-functionality.md` - Updated loading states description
+    - `notes/07-user-workflows.md` - Simplified workflow steps (removed redundant loading message)
+- **Status**: Report page UX improvements complete and production-ready ✅
 
 #### Submit Loading State and Branch Audit Cleanup (2026-06-06) ✅
 
