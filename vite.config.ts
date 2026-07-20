@@ -7,7 +7,7 @@ export default defineConfig({
     plugins: [tailwindcss(), sveltekit()],
     server: {
         watch: {
-            ignored: ['**/.lcm/**', 'notes/**', 'NOTES.md']
+            ignored: ['**/.lcm/**', '**/.llm-wiki/**']
         }
     },
     test: {
