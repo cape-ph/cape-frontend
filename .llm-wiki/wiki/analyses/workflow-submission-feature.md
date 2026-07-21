@@ -18,13 +18,16 @@ component, ~876 lines). Built entirely on [[concepts/schema-driven-forms]].
 5. User fills parameters; each stage is validated against its schema via AJV
    (`coerceOptionsForValidation` then `validate`).
 6. Submit posts the assembled `pipelineConfigs` to
-   `POST {base}/workflows/trigger?dagId=`. Payload shape:
+   `POST {base}/workflows/trigger?dagId=` through the shared `capi` client
+   (which attaches the Cognito bearer token). Payload shape:
    `{ pipelineConfigs: Array<{ pipelineId, nextflowOptions }> }` (built by
    `serializeWorkflow()`). The array is positional - order matches the profile
    response order and identifies each stage, since a workflow may reuse a pipeline.
    Response includes `{ dag_run_id, dag_id }`.
-7. The run is persisted to the `workflow_runs` cookie with a `SubmissionConfig`
-   snapshot and added to reactive state; the UI navigates to the detail view.
+7. No client-side run tracking: ownership and the submission config are recorded
+   server-side in the Airflow DAG run (`conf.cape` + `conf.pipelineConfigs`; see
+   [[analyses/workflow-user-attribution]]). The UI navigates to the detail view,
+   which reads them back from Airflow.
 
 ## Reactive chain
 
@@ -56,6 +59,7 @@ submission fully replaced it. Treat them as dead exports pending removal
 ## Related
 
 - [[analyses/workflow-status-monitoring-feature]]
+- [[analyses/workflow-user-attribution]]
 - [[concepts/schema-driven-forms]]
 - [[concepts/data-models]]
 - [[entities/cape-api]]

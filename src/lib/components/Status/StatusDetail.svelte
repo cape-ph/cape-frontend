@@ -1,44 +1,47 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
-    import { getWorkflowRun, getTaskInstances } from '$lib/workflowStatus';
+    import {
+        getWorkflowRun,
+        getTaskInstances,
+        getPipelineConfigsFromRun
+    } from '$lib/workflowStatus';
     import type { WorkflowRun, TaskInstance } from '$lib/workflowStatus';
-    import { getStoredWorkflowRuns } from '$lib/workflowRunsStorage';
-    import type { SubmissionConfig } from '$lib/workflowRunsStorage';
+    import { getWorkflowProfilesCached } from '$lib/pipeline';
+    import type { PipelineProfile } from '$lib/pipeline';
 
-    let {
-        baseUrl,
-        dagId,
-        dagRunId,
-        onBack,
-        onHalt,
-        onClear,
-        isAvailable = true
-    } = $props<{
+    let { baseUrl, dagId, dagRunId, onBack, onHalt } = $props<{
         baseUrl: string;
         dagId: string;
         dagRunId: string;
         onBack: () => void;
         onHalt: () => void;
-        onClear?: () => void;
-        isAvailable?: boolean;
     }>();
 
     let workflowRun = $state<WorkflowRun | null>(null);
     let taskInstances = $state<TaskInstance[]>([]);
-    let submissionConfig = $state<SubmissionConfig | null>(null);
     let isLoading = $state(true);
     let isRefreshing = $state(false);
     let error = $state<string | null>(null);
     let refreshInterval: number | undefined;
 
+    // Submission details are reconstructed from the run's Airflow conf
+    // (conf.pipelineConfigs), not from client-side storage.
+    const pipelineConfigs = $derived(workflowRun ? getPipelineConfigsFromRun(workflowRun) : []);
+
+    // Stage profiles are fetched (cached) only to show friendly names/versions;
+    // conf.pipelineConfigs alone carries the actual submitted parameters.
+    let stageProfiles = $state<PipelineProfile[]>([]);
+    const profileById = $derived(
+        new Map(
+            stageProfiles
+                .filter((profile) => profile.pipelineId)
+                .map((profile) => [profile.pipelineId as string, profile])
+        )
+    );
+
     const REFRESH_INTERVAL = 30000; // 30 seconds for detail view
 
     onMount(() => {
-        // Load submission config from stored runs (cookie)
-        const stored = getStoredWorkflowRuns();
-        const match = stored.find((r) => r.dagId === dagId && r.dagRunId === dagRunId);
-        submissionConfig = match?.submissionConfig ?? null;
-
         fetchData();
         refreshInterval = window.setInterval(() => {
             if (workflowRun?.state === 'running' || workflowRun?.state === 'queued') {
@@ -67,6 +70,17 @@
             taskInstances = taskInstancesData.task_instances;
             isLoading = false;
             error = null;
+
+            // Best-effort friendly stage names; cached and non-fatal on failure.
+            if (stageProfiles.length === 0) {
+                getWorkflowProfilesCached(baseUrl, dagId)
+                    .then((profiles) => {
+                        stageProfiles = profiles;
+                    })
+                    .catch((err) => {
+                        console.warn('Failed to fetch stage profiles for display:', err);
+                    });
+            }
         } catch (err) {
             console.error('Failed to fetch workflow details:', err);
             error = err instanceof Error ? err.message : String(err);
@@ -172,28 +186,6 @@
                         />
                     </svg>
                     <span>Halt</span>
-                </button>
-            {:else if !isAvailable && onClear}
-                <button
-                    class="flex items-center gap-2 rounded-lg bg-gray-600 px-4 py-2 font-semibold text-white transition-all duration-200 hover:bg-gray-700 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:bg-gray-700 dark:hover:bg-gray-800"
-                    onclick={onClear}
-                    aria-label="Clear this workflow"
-                >
-                    <svg
-                        class="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        />
-                    </svg>
-                    <span>Clear</span>
                 </button>
             {/if}
         </div>
@@ -353,89 +345,91 @@
         </div>
     {/if}
 
-    <!-- Workflow Submission Details section -->
-    {#if submissionConfig}
+    <!-- Workflow Submission Details section (reconstructed from Airflow conf) -->
+    {#if pipelineConfigs.length > 0}
         <div class="space-y-3">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 Workflow Submission Details
             </h2>
-            <div class="space-y-3">
-                <div
-                    class="rounded-lg border border-gray-300 bg-white p-4 shadow-sm dark:border-gray-600 dark:bg-surface-950"
-                >
-                    <p class="mb-4 text-sm text-gray-700 dark:text-gray-300">
-                        This workflow was submitted with {submissionConfig.stages.length} configured stage{submissionConfig
-                            .stages.length !== 1
-                            ? 's'
-                            : ''}:
-                    </p>
-                    <div class="space-y-3">
-                        {#each submissionConfig.stages as stage, index (stage.stageId)}
-                            {@const optionsArray = Object.entries(stage.options)}
-                            <div
-                                class="rounded-lg border border-gray-300 bg-white shadow-sm dark:border-gray-600 dark:bg-surface-950"
-                            >
-                                <details class="p-4">
-                                    <summary
-                                        class="flex cursor-pointer items-start gap-3 text-lg font-semibold"
+            <div
+                class="rounded-lg border border-gray-300 bg-white p-4 shadow-sm dark:border-gray-600 dark:bg-surface-950"
+            >
+                <p class="mb-4 text-sm text-gray-700 dark:text-gray-300">
+                    This workflow was submitted with {pipelineConfigs.length} configured stage{pipelineConfigs.length !==
+                    1
+                        ? 's'
+                        : ''}:
+                </p>
+                <div class="space-y-3">
+                    {#each pipelineConfigs as stage, index (stage.pipelineId)}
+                        {@const optionsArray = Object.entries(stage.nextflowOptions ?? {})}
+                        {@const profile = profileById.get(stage.pipelineId)}
+                        <div
+                            class="rounded-lg border border-gray-300 bg-white shadow-sm dark:border-gray-600 dark:bg-surface-950"
+                        >
+                            <details class="p-4">
+                                <summary
+                                    class="flex cursor-pointer items-start gap-3 text-lg font-semibold"
+                                >
+                                    <svg
+                                        class="mt-1 h-5 w-5 flex-shrink-0 transition-transform details-chevron"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
                                     >
-                                        <svg
-                                            class="mt-1 h-5 w-5 flex-shrink-0 transition-transform details-chevron"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M19 9l-7 7-7-7"
+                                        />
+                                    </svg>
+                                    <span class="flex min-w-0 flex-1 flex-col gap-1">
+                                        <span
+                                            >Stage {index + 1}: {profile?.pipelineName ??
+                                                stage.pipelineId}{profile?.version
+                                                ? ` (v${profile.version})`
+                                                : ''}</span
                                         >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M19 9l-7 7-7-7"
-                                            />
-                                        </svg>
-                                        <span class="flex min-w-0 flex-1 flex-col gap-1">
-                                            <span>
-                                                Stage {index + 1}: {stage.stageName}
-                                            </span>
-                                            <span
-                                                class="text-xs font-medium text-gray-600 dark:text-gray-400"
-                                            >
-                                                {optionsArray.length} parameter{optionsArray.length !==
-                                                1
-                                                    ? 's'
-                                                    : ''} configured
-                                            </span>
+                                        <span
+                                            class="text-xs font-medium text-gray-600 dark:text-gray-400"
+                                        >
+                                            {optionsArray.length} parameter{optionsArray.length !==
+                                            1
+                                                ? 's'
+                                                : ''} configured
                                         </span>
-                                    </summary>
-                                    <div class="mt-3 space-y-3">
-                                        {#if optionsArray.length > 0}
-                                            <div class="grid grid-cols-1 gap-3">
-                                                {#each optionsArray as [key, value] (key)}
-                                                    <div class="flex flex-col gap-1">
-                                                        <span
-                                                            class="text-xs font-medium text-gray-700 dark:text-gray-300"
-                                                        >
-                                                            {key}
-                                                        </span>
-                                                        <div
-                                                            class="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-sm text-gray-900 dark:border-gray-600 dark:bg-surface-900 dark:text-gray-100"
-                                                        >
-                                                            {typeof value === 'object'
-                                                                ? JSON.stringify(value)
-                                                                : String(value)}
-                                                        </div>
+                                    </span>
+                                </summary>
+                                <div class="mt-3 space-y-3">
+                                    {#if optionsArray.length > 0}
+                                        <div class="grid grid-cols-1 gap-3">
+                                            {#each optionsArray as [key, value] (key)}
+                                                <div class="flex flex-col gap-1">
+                                                    <span
+                                                        class="text-xs font-medium text-gray-700 dark:text-gray-300"
+                                                    >
+                                                        {key}
+                                                    </span>
+                                                    <div
+                                                        class="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-sm text-gray-900 dark:border-gray-600 dark:bg-surface-900 dark:text-gray-100"
+                                                    >
+                                                        {typeof value === 'object'
+                                                            ? JSON.stringify(value)
+                                                            : String(value)}
                                                     </div>
-                                                {/each}
-                                            </div>
-                                        {:else}
-                                            <p class="text-sm text-gray-700 dark:text-gray-300">
-                                                No parameters configured for this stage.
-                                            </p>
-                                        {/if}
-                                    </div>
-                                </details>
-                            </div>
-                        {/each}
-                    </div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        <p class="text-sm text-gray-700 dark:text-gray-300">
+                                            No parameters configured for this stage.
+                                        </p>
+                                    {/if}
+                                </div>
+                            </details>
+                        </div>
+                    {/each}
                 </div>
             </div>
         </div>

@@ -1,5 +1,5 @@
 import type { AnySchema } from 'ajv';
-import axios from 'axios';
+import { capi } from '$lib/apiClient';
 export { compile, validate } from '$lib/schema';
 
 export interface Pipeline {
@@ -40,7 +40,7 @@ export interface WorkflowDAG {
  */
 export async function getPipelines(baseUrl: string): Promise<Pipeline[]> {
     const url = `${baseUrl}/dap/pipelines`;
-    const response = await axios.get(url);
+    const response = await capi.get(url);
     const pipelines: Pipeline[] = response.data;
     return pipelines;
 }
@@ -53,7 +53,7 @@ export async function getPipelines(baseUrl: string): Promise<Pipeline[]> {
  */
 export async function getWorkflows(baseUrl: string): Promise<WorkflowDAG[]> {
     const url = `${baseUrl}/workflows`;
-    const response = await axios.get(url);
+    const response = await capi.get(url);
     const workflows: WorkflowDAG[] = response.data.dags || [];
     return workflows;
 }
@@ -74,7 +74,7 @@ export async function getPipelineProfile(
         pipeline: pipeline.pipeline_name,
         version: pipeline.version
     };
-    const response = await axios.get(url, { params: params });
+    const response = await capi.get(url, { params: params });
     const profile: PipelineProfile = response.data;
     return profile;
 }
@@ -92,7 +92,39 @@ export async function getWorkflowProfiles(
 ): Promise<PipelineProfile[]> {
     const url = `${baseUrl}/workflows/pipelineprofiles`;
     const params = { dagId };
-    const response = await axios.get(url, { params });
+    const response = await capi.get(url, { params });
     const profiles: PipelineProfile[] = response.data;
     return profiles;
+}
+
+// Workflow stage profiles for a given DAG are stable within a session, so cache
+// the in-flight/resolved promise per (baseUrl, dagId). Used by read-only views
+// (e.g. the run detail) that only need profiles to display friendly stage
+// names/versions, without adding a fetch on every render or refresh.
+const workflowProfilesCache = new Map<string, Promise<PipelineProfile[]>>();
+
+/**
+ * Get workflow stage profiles for a DAG, cached for the session.
+ *
+ * @param baseUrl - the API base URL
+ * @param dagId - the workflow DAG ID
+ * @returns {Promise<PipelineProfile[]>} - array of profiles (one per stage)
+ */
+export function getWorkflowProfilesCached(
+    baseUrl: string,
+    dagId: string
+): Promise<PipelineProfile[]> {
+    const key = `${baseUrl}::${dagId}`;
+    let cached = workflowProfilesCache.get(key);
+
+    if (!cached) {
+        cached = getWorkflowProfiles(baseUrl, dagId).catch((err) => {
+            // Do not cache failures - allow a retry on the next call.
+            workflowProfilesCache.delete(key);
+            throw err;
+        });
+        workflowProfilesCache.set(key, cached);
+    }
+
+    return cached;
 }

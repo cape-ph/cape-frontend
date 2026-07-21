@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getWorkflows, getWorkflowProfiles } from '$lib/pipeline';
 import type { PipelineProfile, WorkflowDAG } from '$lib/pipeline';
 import Submit from './Submit.svelte';
-import axios from 'axios';
+import { capi } from '$lib/apiClient';
 
-vi.mock('axios');
+vi.mock('$lib/apiClient', () => ({
+    capi: { get: vi.fn(), post: vi.fn(), patch: vi.fn() }
+}));
 
 vi.mock('$lib/pipeline', () => ({
     getWorkflows: vi.fn(),
@@ -223,7 +225,8 @@ describe('Submit.svelte', () => {
     });
 
     it('submits a wrapped payload with pipelineConfigs array to the workflow trigger endpoint', async () => {
-        const axiosPostSpy = vi.spyOn(axios, 'post').mockResolvedValue({ data: {} });
+        const axiosPostSpy = vi.mocked(capi.post);
+        axiosPostSpy.mockResolvedValue({ data: {} });
 
         await renderSelectedSubmit([
             createProfile({
@@ -278,7 +281,8 @@ describe('Submit.svelte', () => {
         const pendingSubmission = createDeferred<{
             data: { dag_id: string; dag_run_id: string };
         }>();
-        const axiosPostSpy = vi.spyOn(axios, 'post').mockReturnValue(pendingSubmission.promise);
+        const axiosPostSpy = vi.mocked(capi.post);
+        axiosPostSpy.mockReturnValue(pendingSubmission.promise);
 
         await renderSelectedSubmit();
 
@@ -310,7 +314,8 @@ describe('Submit.svelte', () => {
     });
 
     it('restores the submit button when workflow submission fails', async () => {
-        const axiosPostSpy = vi.spyOn(axios, 'post').mockRejectedValue(new Error('API failed'));
+        const axiosPostSpy = vi.mocked(capi.post);
+        axiosPostSpy.mockRejectedValue(new Error('API failed'));
 
         await renderSelectedSubmit();
 

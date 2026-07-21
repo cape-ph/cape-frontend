@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { capi } from '$lib/apiClient';
 
 /**
  * Workflow run status from Airflow
@@ -157,7 +157,7 @@ export async function getWorkflowRun(
 ): Promise<WorkflowRun> {
     const url = `${baseUrl}/workflows/run`;
     const params = { dagId, dagRunId };
-    const response = await axios.get(url, { params });
+    const response = await capi.get(url, { params });
     return response.data;
 }
 
@@ -176,7 +176,7 @@ export async function getTaskInstances(
 ): Promise<TaskInstancesResponse> {
     const url = `${baseUrl}/workflows/run/taskinstances`;
     const params = { dagId, dagRunId };
-    const response = await axios.get(url, { params });
+    const response = await capi.get(url, { params });
     return response.data;
 }
 
@@ -193,7 +193,7 @@ export async function getWorkflowTasks(
 ): Promise<WorkflowTasksResponse> {
     const url = `${baseUrl}/workflows/tasks`;
     const params = { dagId };
-    const response = await axios.get(url, { params });
+    const response = await capi.get(url, { params });
     return response.data;
 }
 
@@ -215,6 +215,52 @@ export async function haltWorkflow(
     const url = `${baseUrl}/workflows/halt`;
     const params = { dagId, dagRunId };
     const body = note ? { note } : undefined;
-    const response = await axios.patch(url, body, { params });
+    const response = await capi.patch(url, body, { params });
     return response.data;
+}
+
+/**
+ * Response from GET /workflows/runs (the calling user's runs).
+ */
+export interface WorkflowRunsResponse {
+    dag_runs: WorkflowRun[];
+    total_entries: number;
+}
+
+/**
+ * A single pipeline stage config as stored in a run's `conf.pipelineConfigs`.
+ * This is what the frontend submits and what the DAG consumes; it is the source
+ * of truth for reconstructing submission details on the status detail view.
+ */
+export interface WorkflowPipelineConfig {
+    pipelineId: string;
+    nextflowOptions?: Record<string, unknown>;
+}
+
+/**
+ * Get the workflow runs triggered by the currently authenticated user.
+ *
+ * Ownership is resolved server-side from the caller's Cognito token (see the
+ * CAPE API authorizer), so this replaces the old cookie-based run tracking.
+ *
+ * @param baseUrl - API base URL
+ * @returns Promise<WorkflowRun[]> - the user's runs, most recent first
+ */
+export async function getMyWorkflowRuns(baseUrl: string): Promise<WorkflowRun[]> {
+    const url = `${baseUrl}/workflows/runs`;
+    const response = await capi.get<WorkflowRunsResponse>(url);
+    return response.data.dag_runs ?? [];
+}
+
+/**
+ * Extract the submitted pipeline stage configs from a run's `conf`.
+ *
+ * Returns an empty array when the run has no recognizable pipeline configs.
+ *
+ * @param run - the workflow run
+ * @returns WorkflowPipelineConfig[]
+ */
+export function getPipelineConfigsFromRun(run: WorkflowRun): WorkflowPipelineConfig[] {
+    const configs = run.conf?.pipelineConfigs;
+    return Array.isArray(configs) ? (configs as WorkflowPipelineConfig[]) : [];
 }
