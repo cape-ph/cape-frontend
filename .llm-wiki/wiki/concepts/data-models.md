@@ -34,13 +34,6 @@ is no ORM or database layer in the frontend (see
 - `WorkflowRun`, `TaskInstance`, `TaskInstancesResponse` - Airflow REST shapes
   (snake_case).
 
-## Persistence / submission types (`src/lib/workflowRunsStorage.ts`)
-
-- `StoredWorkflowRun` - `dagId`, `dagRunId`, `submittedAt`, optional
-  `submissionConfig` (cookie-stored, camelCase).
-- `SubmissionConfig` - `workflowName` plus `stages[]` (`stageId`, `stageName`,
-  `pipelineName`, `pipelineVersion`, `options`).
-
 ## Upload types (`src/lib/mpu.ts`, `src/lib/stream.ts`)
 
 - `MultipartUploadParams`, `MultipartUploadResult`, `OnProgress`, `ChunkStream`.
@@ -50,7 +43,7 @@ is no ORM or database layer in the frontend (see
 ## Naming note
 
 API-facing types use snake_case matching the backend/Airflow payloads; internal
-frontend types (stored runs, submission config) use camelCase. This split is
+frontend types (e.g. the `pipelineConfigs` submission shape) use camelCase. This split is
 intentional - do not "normalize" API types.
 
 ## Related

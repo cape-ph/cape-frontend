@@ -4,3 +4,6 @@ pnpm-lock.yaml
 yarn.lock
 bun.lock
 bun.lockb
+
+# LLM Wiki (authored + generated Markdown, managed by the wiki tooling not Prettier)
+.llm-wiki/

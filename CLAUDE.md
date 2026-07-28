@@ -228,8 +228,8 @@ ps aux | grep "vite dev" | grep -v grep
 - [ ] `npm run test` - All tests pass
 - [ ] `npm run dev` - Manually tested changes in browser (for UI work)
 - [ ] **Wiki updated** - durable findings recorded as `.llm-wiki/wiki/**` pages
-  - [ ] No obsolete information remains in the wiki
-  - [ ] New pages are cross-linked and lint-clean (no orphans or missing links)
+    - [ ] No obsolete information remains in the wiki
+    - [ ] New pages are cross-linked and lint-clean (no orphans or missing links)
 
 **For UI/component changes**, also verify in dev server:
 
@@ -317,8 +317,8 @@ without updating the wiki, the work is incomplete.
 **API Integration**
 
 - `pipeline.ts`: API client for fetching pipelines and pipeline profiles from CAPE API
-  - Uses AJV for JSON Schema validation of pipeline parameters
-  - Key types: `Pipeline`, `PipelineProfile` (includes `parametersSchema` for dynamic form generation)
+    - Uses AJV for JSON Schema validation of pipeline parameters
+    - Key types: `Pipeline`, `PipelineProfile` (includes `parametersSchema` for dynamic form generation)
 - `mpu.ts`: Multipart upload manager for large file uploads to S3
 - `stream.ts`: TAR streaming for bundling sample metadata with FASTA files
 
@@ -339,9 +339,9 @@ Each component directory contains:
 
 - **FileUpload**: Handles FASTA file uploads with multipart upload progress tracking
 - **Submit**: Dynamic pipeline submission form
-  - Fetches pipeline list and selected pipeline profile from API
-  - Generates form fields from `PipelineProfile.parametersSchema` (JSON Schema)
-  - Validates submission against schema before sending
+    - Fetches pipeline list and selected pipeline profile from API
+    - Generates form fields from `PipelineProfile.parametersSchema` (JSON Schema)
+    - Validates submission against schema before sending
 - **Report**: Displays pipeline execution reports
 - **LoggingIn**: Authentication flow UI
 - **Navbar**: Top navigation with user info and tab switching
@@ -351,8 +351,8 @@ Each component directory contains:
 
 - `+layout.svelte`: Root layout
 - `+page.svelte`: Main application page with three tabs (Upload, Submit, Report)
-  - Conditionally renders based on authentication state (`auth.user`)
-  - Tab state managed in component (`activeKey`)
+    - Conditionally renders based on authentication state (`auth.user`)
+    - Tab state managed in component (`activeKey`)
 - `auth/callback/+page.svelte`: OAuth callback handler
 
 ### Svelte 5 State Management
