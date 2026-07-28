@@ -24,16 +24,17 @@ capabilities exist but are not yet surfaced.
 - `/objstorage/contents`, `/objstorage/crawler` - storage browsing (a governed
   storage browser is sketched in `PLAN.md`).
 - `/user/attribute[s]` - user profile management.
-- `GET /workflows/tasks` - task-graph metadata is fetched-capable
-  (`getWorkflowTasks`) but not currently rendered.
+- `GET /workflows/tasks` - task-graph metadata; the frontend no longer ships a
+  client for it (the unused `getWorkflowTasks` was removed).
 - `PipelineProfile.uiSchema` (JsonForms layout) and `inherits` (shared base config)
   are provided by the backend but not yet consumed ([[concepts/data-models]]).
 
 ## Dead code and unused dependencies
 
-- `getPipelines` / `getPipelineProfile` in `pipeline.ts` (`/dap/pipelines`,
-  `/dap/pipelineprofile`) are exported but have no call sites in `src/` - leftovers
-  from the retired single-pipeline flow. There is no `/dap/submit` client function.
+- There is no `/dap/submit` client function; the retired single-pipeline
+  `/dap/pipelines` and `/dap/pipelineprofile` clients (`getPipelines` /
+  `getPipelineProfile`) have been removed from `pipeline.ts`. The backend
+  endpoints remain but the frontend no longer calls them.
 - `streamsaver` and `cookie` are declared in `package.json` but never imported in
   `src/`. Client-side workflow-run tracking (which used raw `document.cookie`) was
   removed in favor of server-side attribution

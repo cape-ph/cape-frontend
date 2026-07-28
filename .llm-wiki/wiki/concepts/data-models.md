@@ -6,8 +6,6 @@ is no ORM or database layer in the frontend (see
 
 ## Pipeline / workflow definitions (`src/lib/pipeline.ts`)
 
-- `Pipeline` - `pipeline_name`, `pipeline_type`, `project`, `version` (snake_case,
-  from `/dap/pipelines`).
 - `PipelineProfile` - carries `parametersSchema` (JSON Schema, drives
   [[concepts/schema-driven-forms]]), plus `pipelineName`, `pipelineDescription`,
   `project`, `submission` (`encoding`, `optionsFieldName`), `pipelineType`,
@@ -33,8 +31,8 @@ is no ORM or database layer in the frontend (see
 - `WorkflowRunState` / `TaskInstanceState` - Airflow state union (`queued`,
   `running`, `success`, `failed`, `skipped`, `upstream_failed`, `up_for_retry`,
   `up_for_reschedule`, `restarting`, `deferred`, `removed`).
-- `WorkflowRun`, `TaskInstance`, `TaskInstancesResponse`, `WorkflowTask`,
-  `WorkflowTasksResponse` - Airflow REST shapes (snake_case).
+- `WorkflowRun`, `TaskInstance`, `TaskInstancesResponse` - Airflow REST shapes
+  (snake_case).
 
 ## Persistence / submission types (`src/lib/workflowRunsStorage.ts`)
 

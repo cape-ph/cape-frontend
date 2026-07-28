@@ -37,11 +37,11 @@ safely, surface via the toaster:
 
 ```typescript
 try {
-    pipelines = await getPipelines(baseUrl);
+    workflows = await getWorkflows(baseUrl);
 } catch (err) {
-    pipelines = undefined;
+    workflows = undefined;
     const message = err instanceof Error ? err.message : String(err);
-    toaster.error({ title: `An error occurred while reading the pipelines: ${message}` });
+    toaster.error({ title: `An error occurred while reading the workflows: ${message}` });
 }
 ```
 

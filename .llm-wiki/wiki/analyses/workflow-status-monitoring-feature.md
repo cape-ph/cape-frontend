@@ -30,7 +30,6 @@ resolved.
 - `getMyWorkflowRuns(baseUrl)` -> `GET /workflows/runs` (the current user's runs)
 - `getWorkflowRun(baseUrl, dagId, dagRunId)` -> `GET /workflows/run`
 - `getTaskInstances(...)` -> `GET /workflows/run/taskinstances`
-- `getWorkflowTasks(baseUrl, dagId)` -> `GET /workflows/tasks`
 - `haltWorkflow(baseUrl, dagId, dagRunId, note?)` -> `PATCH /workflows/halt`.
   Irreversible: terminates running tasks, sets run `state` to `failed`, stores the
   optional `note`. Only valid for running/queued runs.

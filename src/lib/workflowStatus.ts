@@ -97,52 +97,6 @@ export interface TaskInstancesResponse {
 }
 
 /**
- * Task definition from GET /workflows/tasks
- */
-export interface WorkflowTask {
-    task_id: string;
-    task_display_name: string;
-    owner: string;
-    start_date: string;
-    trigger_rule: string;
-    depends_on_past: boolean;
-    wait_for_downstream: boolean;
-    retries: number;
-    queue: string;
-    pool: string;
-    pool_slots: number;
-    retry_delay: {
-        __type: string;
-        days: number;
-        seconds: number;
-        microseconds: number;
-    };
-    retry_exponential_backoff: boolean;
-    priority_weight: number;
-    weight_rule: string;
-    ui_color: string;
-    ui_fgcolor: string;
-    template_fields: string[];
-    downstream_task_ids: string[];
-    operator_name: string;
-    params: Record<string, unknown>;
-    class_ref: {
-        module_path: string;
-        class_name: string;
-    };
-    is_mapped: boolean;
-    extra_links: unknown[];
-}
-
-/**
- * Response from GET /workflows/tasks
- */
-export interface WorkflowTasksResponse {
-    tasks: WorkflowTask[];
-    total_entries: number;
-}
-
-/**
  * Get workflow run status
  *
  * @param baseUrl - API base URL
@@ -176,23 +130,6 @@ export async function getTaskInstances(
 ): Promise<TaskInstancesResponse> {
     const url = `${baseUrl}/workflows/run/taskinstances`;
     const params = { dagId, dagRunId };
-    const response = await capi.get(url, { params });
-    return response.data;
-}
-
-/**
- * Get task definitions for a workflow
- *
- * @param baseUrl - API base URL
- * @param dagId - Workflow DAG ID
- * @returns Promise<WorkflowTasksResponse>
- */
-export async function getWorkflowTasks(
-    baseUrl: string,
-    dagId: string
-): Promise<WorkflowTasksResponse> {
-    const url = `${baseUrl}/workflows/tasks`;
-    const params = { dagId };
     const response = await capi.get(url, { params });
     return response.data;
 }

@@ -90,30 +90,15 @@ export function updateCachedRun(run: WorkflowRun, taskInstances: TaskInstance[])
     const existing = readWorkflowSnapshot();
     if (!existing) return;
 
-    const runs = existing.runs.some((r) => r.dag_run_id === run.dag_run_id)
-        ? existing.runs.map((r) => (r.dag_run_id === run.dag_run_id ? run : r))
-        : [run, ...existing.runs];
+    let runs: WorkflowRun[];
+    if (existing.runs.some((r) => r.dag_run_id === run.dag_run_id)) {
+        runs = existing.runs.map((r) => (r.dag_run_id === run.dag_run_id ? run : r));
+    } else {
+        runs = [run, ...existing.runs];
+    }
 
     writeWorkflowSnapshot({
         runs,
         taskInstances: { ...existing.taskInstances, [run.dag_run_id]: taskInstances }
     });
-}
-
-/**
- * Drop all cached workflow snapshots (e.g. on logout). Clears every user's
- * entry rather than only the current one, since the signed-in user may already
- * be gone by the time this runs.
- */
-export function clearWorkflowSnapshots(): void {
-    memoryCache.clear();
-
-    if (typeof sessionStorage === 'undefined') return;
-
-    for (let i = sessionStorage.length - 1; i >= 0; i--) {
-        const key = sessionStorage.key(i);
-        if (key && key.startsWith(KEY_PREFIX)) {
-            sessionStorage.removeItem(key);
-        }
-    }
 }

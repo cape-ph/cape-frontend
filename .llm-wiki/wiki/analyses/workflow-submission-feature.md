@@ -50,10 +50,10 @@ orchestrator wires this at run time; the frontend just submits per-stage options
 
 ## Legacy single-pipeline path
 
-`pipeline.ts` still exports `getPipelines` (`/dap/pipelines`) and
-`getPipelineProfile` (`/dap/pipelineprofile`) from the older single-pipeline
-submission flow, but neither has any call site in the current UI - workflow
-submission fully replaced it. Treat them as dead exports pending removal
+The older single-pipeline submission flow (`/dap/pipelines`,
+`/dap/pipelineprofile`) has been fully replaced by workflow submission. Its unused
+client functions `getPipelines` and `getPipelineProfile` were removed from
+`pipeline.ts`; the backend endpoints remain but the frontend no longer calls them
 ([[analyses/known-gaps-and-unused-api]]).
 
 ## Related

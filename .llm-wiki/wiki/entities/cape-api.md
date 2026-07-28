@@ -7,8 +7,9 @@ hardcodes `apiBase = 'https://api.cape-dev.org/capi-dev'`.
 
 ## Endpoints used by the frontend
 
-Pipelines / profiles (legacy - defined in `pipeline.ts` but NOT called by the
-current UI; `getPipelines` / `getPipelineProfile` have no call sites):
+Pipelines / profiles (legacy `/dap/*` endpoints; the frontend no longer defines
+client functions for these - `getPipelines` / `getPipelineProfile` were removed
+when the single-pipeline flow was retired, though the backend endpoints remain):
 
 - `GET /dap/pipelines` -> `Pipeline[]`
 - `GET /dap/pipelineprofile?pipeline=&version=` -> `PipelineProfile`
@@ -26,7 +27,6 @@ Workflows (current path):
   options field name is `nextflowOptions`, not the legacy `options`.
 - `GET /workflows/run?dagId=&dagRunId=` -> `WorkflowRun`
 - `GET /workflows/run/taskinstances?dagId=&dagRunId=` -> `TaskInstancesResponse`
-- `GET /workflows/tasks?dagId=` -> `WorkflowTasksResponse`
 - `PATCH /workflows/halt?dagId=&dagRunId=` (optional `{ note }`) -> `WorkflowRun`
 
 Object storage (S3 multipart brokering):
