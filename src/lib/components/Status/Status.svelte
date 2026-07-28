@@ -3,6 +3,7 @@
     import { SvelteMap } from 'svelte/reactivity';
     import { getMyWorkflowRuns, getWorkflowRun, getTaskInstances } from '$lib/workflowStatus';
     import type { TaskInstance, WorkflowRun } from '$lib/workflowStatus';
+    import { readWorkflowSnapshot, writeWorkflowSnapshot } from '$lib/workflowCache';
     import WorkflowRunCard from './WorkflowRunCard.svelte';
 
     let { baseUrl, onSelectRun, onNavigateToSubmit } = $props<{
@@ -24,6 +25,18 @@
     let refreshInterval: number | undefined;
 
     onMount(() => {
+        // Paint the last-known runs immediately (stale-while-revalidate) so a
+        // tab switch or reload does not flash the empty loading placeholder.
+        const cached = readWorkflowSnapshot();
+        if (cached && cached.runs.length > 0) {
+            runs = cached.runs;
+            taskInstancesMap.clear();
+            for (const [dagRunId, instances] of Object.entries(cached.taskInstances)) {
+                taskInstancesMap.set(dagRunId, instances);
+            }
+            isLoading = false;
+        }
+
         refreshAllRuns();
 
         // Poll running workflows for status updates.
@@ -47,6 +60,7 @@
             runs = myRuns;
             loadError = null;
             await Promise.all(myRuns.map((run) => refreshTaskInstances(run)));
+            persistSnapshot();
         } catch (err) {
             console.error('Failed to load workflow runs:', err);
             loadError = err instanceof Error ? err.message : String(err);
@@ -75,6 +89,7 @@
                     }
                 })
             );
+            persistSnapshot();
         } finally {
             isRefreshing = false;
         }
@@ -91,6 +106,16 @@
 
     function getTaskInstancesForRun(dagRunId: string): TaskInstance[] | null {
         return taskInstancesMap.get(dagRunId) ?? null;
+    }
+
+    // Persist the current runs + task instances so the next mount can render
+    // instantly while it revalidates. Keyed by user in the cache layer.
+    function persistSnapshot() {
+        const taskInstances: Record<string, TaskInstance[]> = {};
+        for (const [dagRunId, instances] of taskInstancesMap) {
+            taskInstances[dagRunId] = instances;
+        }
+        writeWorkflowSnapshot({ runs, taskInstances });
     }
 </script>
 
@@ -168,7 +193,7 @@
                 >Loading your workflows...</span
             >
         </div>
-    {:else if loadError}
+    {:else if loadError && runs.length === 0}
         <div
             class="flex min-h-[300px] flex-col items-center justify-center rounded-lg border border-rose-300 bg-rose-50 p-12 text-center dark:border-rose-800 dark:bg-rose-950/30"
         >
@@ -229,6 +254,14 @@
             </button>
         </div>
     {:else}
+        {#if loadError}
+            <div
+                class="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300"
+                role="status"
+            >
+                Couldn't refresh workflows ({loadError}). Showing the last loaded results.
+            </div>
+        {/if}
         {#each runs as run, index (run.dag_run_id)}
             {@const taskInstances = getTaskInstancesForRun(run.dag_run_id)}
             <div class="animate-fade-in-up" style="animation-delay: {index * 50}ms">

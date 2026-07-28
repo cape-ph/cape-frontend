@@ -8,6 +8,7 @@
     import type { WorkflowRun, TaskInstance } from '$lib/workflowStatus';
     import { getWorkflowProfilesCached } from '$lib/pipeline';
     import type { PipelineProfile } from '$lib/pipeline';
+    import { readWorkflowSnapshot, updateCachedRun } from '$lib/workflowCache';
 
     let { baseUrl, dagId, dagRunId, onBack, onHalt } = $props<{
         baseUrl: string;
@@ -42,6 +43,16 @@
     const REFRESH_INTERVAL = 30000; // 30 seconds for detail view
 
     onMount(() => {
+        // Seed from the shared runs cache so the details paint instantly on
+        // entry (stale-while-revalidate) instead of the "Loading..." state.
+        const cached = readWorkflowSnapshot();
+        const cachedRun = cached?.runs.find((run) => run.dag_run_id === dagRunId);
+        if (cachedRun) {
+            workflowRun = cachedRun;
+            taskInstances = cached?.taskInstances[dagRunId] ?? [];
+            isLoading = false;
+        }
+
         fetchData();
         refreshInterval = window.setInterval(() => {
             if (workflowRun?.state === 'running' || workflowRun?.state === 'queued') {
@@ -70,6 +81,9 @@
             taskInstances = taskInstancesData.task_instances;
             isLoading = false;
             error = null;
+
+            // Keep the shared list cache fresh with this run's latest data.
+            updateCachedRun(runData, taskInstancesData.task_instances);
 
             // Best-effort friendly stage names; cached and non-fatal on failure.
             if (stageProfiles.length === 0) {

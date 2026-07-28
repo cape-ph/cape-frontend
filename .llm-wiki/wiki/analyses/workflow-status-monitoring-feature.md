@@ -47,6 +47,16 @@ States mirror Airflow: `queued`, `running`, `success`, `failed`, `skipped`,
 - Auto-refresh every 30s for running/queued runs; manual refresh always available.
   Because the list only returns runs that exist in Airflow for the user, the old
   "unavailable run" (404/retention) handling and cookie pruning are gone.
+- Stale-while-revalidate: the runs list and their task instances are cached in
+  `workflowCache.ts` (in-memory + `sessionStorage`, keyed by the user's Cognito
+  `sub`). On mount `Status.svelte` paints the last-known snapshot immediately
+  (spinner active) instead of the blocking "Loading..." placeholder, then
+  revalidates and rewrites the snapshot. `StatusDetail.svelte` seeds the same
+  cache on entry (matching the run by `dag_run_id`) so the details render at
+  once, and writes each revalidated run back via `updateCachedRun` to keep the
+  list cache fresh. A failed background refresh keeps the cached list visible
+  with an inline banner rather than replacing it with the error screen (that
+  screen only shows when there is nothing cached to display).
 - `dag_run_id` has the form `manual+YYYY-MM-DDTHH:MM:SS+00:00`.
 - URL query params (`tab`, `view`, `dagId`, `dagRunId`) drive navigation and
   browser back/forward.
