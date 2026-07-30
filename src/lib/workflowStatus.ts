@@ -198,5 +198,24 @@ export async function getMyWorkflowRuns(baseUrl: string): Promise<WorkflowRun[]>
  */
 export function getPipelineConfigsFromRun(run: WorkflowRun): WorkflowPipelineConfig[] {
     const configs = run.conf?.pipelineConfigs;
-    return Array.isArray(configs) ? (configs as WorkflowPipelineConfig[]) : [];
+    if (!Array.isArray(configs)) return [];
+
+    return configs.reduce<WorkflowPipelineConfig[]>((valid, entry) => {
+        if (typeof entry !== 'object' || entry === null) return valid;
+
+        const { pipelineId, nextflowOptions } = entry as {
+            pipelineId?: unknown;
+            nextflowOptions?: unknown;
+        };
+        if (typeof pipelineId !== 'string') return valid;
+
+        valid.push({
+            pipelineId,
+            nextflowOptions:
+                typeof nextflowOptions === 'object' && nextflowOptions !== null
+                    ? (nextflowOptions as Record<string, unknown>)
+                    : undefined
+        });
+        return valid;
+    }, []);
 }

@@ -371,7 +371,7 @@
                         : ''}:
                 </p>
                 <div class="space-y-3">
-                    {#each pipelineConfigs as stage, index (stage.pipelineId)}
+                    {#each pipelineConfigs as stage, index (index)}
                         {@const optionsArray = Object.entries(stage.nextflowOptions ?? {})}
                         {@const profile = profileById.get(stage.pipelineId)}
                         <div

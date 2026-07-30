@@ -73,4 +73,42 @@ describe('getPipelineConfigsFromRun', () => {
             []
         );
     });
+
+    it('skips entries that are not objects or lack a string pipelineId', () => {
+        const run = buildRun({
+            conf: {
+                pipelineConfigs: [
+                    { pipelineId: 'stage-1' },
+                    null,
+                    'garbage',
+                    { nextflowOptions: { a: 1 } },
+                    { pipelineId: 42 }
+                ]
+            }
+        });
+        const configs = getPipelineConfigsFromRun(run);
+        expect(configs).toHaveLength(1);
+        expect(configs[0].pipelineId).toBe('stage-1');
+    });
+
+    it('normalizes a non-object nextflowOptions to undefined', () => {
+        const run = buildRun({
+            conf: { pipelineConfigs: [{ pipelineId: 'stage-1', nextflowOptions: 'nope' }] }
+        });
+        expect(getPipelineConfigsFromRun(run)[0].nextflowOptions).toBeUndefined();
+    });
+
+    it('keeps every stage when a workflow reuses the same pipeline', () => {
+        const run = buildRun({
+            conf: {
+                pipelineConfigs: [
+                    { pipelineId: 'shared', nextflowOptions: { stage: 1 } },
+                    { pipelineId: 'shared', nextflowOptions: { stage: 2 } }
+                ]
+            }
+        });
+        const configs = getPipelineConfigsFromRun(run);
+        expect(configs).toHaveLength(2);
+        expect(configs.map((c) => c.nextflowOptions)).toEqual([{ stage: 1 }, { stage: 2 }]);
+    });
 });
