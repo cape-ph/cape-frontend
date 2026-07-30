@@ -6,95 +6,21 @@ This file provides guidance to AI coding agents (Claude Code, Cursor, Windsurf, 
 
 ## AI Assistant Context Management
 
-### SESSION RESUME PROTOCOL (MANDATORY - Execute First)
+This project uses an LLM Wiki under `.llm-wiki/` as its durable, cross-session
+knowledge base. See the "Project Wiki" section below for layout and rules.
 
-When the user says "let's pick up where we left off" or any similar resume phrase:
+### Session start
 
-**YOU MUST COMPLETE THESE STEPS IN ORDER BEFORE DOING ANYTHING ELSE:**
+At the start of non-trivial work, search the wiki for relevant prior knowledge
+(architecture, features, data models, dev setup, coding conventions) before asking
+questions or making changes. Good entry points are the architecture overview
+synthesis page and the concept/analysis pages under `.llm-wiki/wiki/`.
 
-- [ ] **Step 1**: Read `NOTES.md` to understand recent work and context
-- [ ] **Step 2**: Read ALL `notes/*.md` files in parallel (use multiple parallel read calls)
-- [ ] **Step 3**: ONLY AFTER both steps complete, respond to user or ask clarifying questions
+### During and after work
 
-**DO NOT:**
-
-- Skip step 2
-- Ask questions before loading both NOTES.md and notes/
-- Start any work before loading full context
-- Treat the notes/ directory as optional
-
-**WHY THIS MATTERS:**
-
-- `NOTES.md` = your working memory (what happened recently)
-- `notes/` = project knowledge base (architecture, APIs, types, patterns)
-- Both are REQUIRED for effective session resume, not optional
-
----
-
-### NOTES.md - Your Persistent Memory
-
-**Location**: `./NOTES.md`
-
-**Purpose**: This file is YOUR personal context file for maintaining continuity across sessions. It tracks:
-
-- Work completed (with dates)
-- Current project state and active branches
-- Pending TODOs and future enhancements
-- Technical discoveries and lessons learned
-- Known issues and gaps
-- Quick-start commands for next session
-- Questions to ask the user
-
-**Maintenance Requirements**:
-
-1. **Update at end of every significant work session** - Before user ends conversation, update NOTES.md with:
-    - What was accomplished
-    - What was learned
-    - What's next
-    - Any new issues discovered
-    - Any questions for next session
-
-2. **You own this file** - No permission needed to edit. It's your working memory.
-
-3. **Keep it current** - As you work, update relevant sections:
-    - Move completed TODOs from "Pending Work" to "Recent Work Completed"
-    - Add new discoveries to "Technical Discoveries"
-    - Update "Current Project State" with branch/status changes
-    - Add new issues to "Known Issues & Gaps"
-    - Update "Context for Next Session" with what to read first
-
-4. **PUBLIC file** - Never include secrets, API keys, passwords, or private information. This file may be committed to the repository.
-
-5. **Session continuity** - When a new session starts with "let's pick up where we left off":
-    - Read NOTES.md FIRST to understand recent work and context
-    - **IMMEDIATELY read ALL files in the `notes/` directory in parallel** - DO NOT skip this step
-    - **DO NOT ask questions or start work until BOTH NOTES.md and notes/ are fully loaded**
-    - The `notes/` directory contains essential architectural, API, data type, and implementation details
-    - NOTES.md is your working memory; `notes/` is the project knowledge base
-    - Loading both is MANDATORY, not optional
-
-**Format Guidelines**:
-
-- Use clear section headers
-- Include dates for work completed
-- Keep TODOs actionable and specific
-- Link to relevant files and line numbers
-- Include code snippets for complex discoveries
-- Keep "Context for Next Session" section updated for quick resume
-
-**Example Update Pattern**:
-
-```markdown
-### Session 2026-06-02 (continued)
-
-- **Goal**: Implement client-side validation
-- **Completed**:
-    - Added AJV validation in Submit.svelte line 234
-    - Updated tests in Submit.svelte.test.ts
-    - Documented validation flow in notes/05-functionality.md
-- **Discovered**: Validation errors need better UX, currently just toast
-- **Next**: Add inline field validation errors
-```
+Record durable, reusable findings as new or updated wiki pages in the same session
+as the code change - documentation drift is treated as incomplete work here. Keep
+pages atomic and cross-linked (see "Project Wiki" below).
 
 ---
 
@@ -301,11 +227,9 @@ ps aux | grep "vite dev" | grep -v grep
 - [ ] `npm run check` - No type errors
 - [ ] `npm run test` - All tests pass
 - [ ] `npm run dev` - Manually tested changes in browser (for UI work)
-- [ ] **Documentation updated** - **MANDATORY**: See "Documentation Maintenance" section below
-    - [ ] `NOTES.md` updated with work summary
-    - [ ] Relevant `notes/*.md` files updated (see documentation maintenance rules)
-    - [ ] No obsolete information remains in docs
-    - [ ] Examples in docs reflect current implementation
+- [ ] **Wiki updated** - durable findings recorded as `.llm-wiki/wiki/**` pages
+    - [ ] No obsolete information remains in the wiki
+    - [ ] New pages are cross-linked and lint-clean (no orphans or missing links)
 
 **For UI/component changes**, also verify in dev server:
 
@@ -360,116 +284,24 @@ npm run test:unit
 
 ## Documentation Maintenance
 
-### ⚠️ CRITICAL REQUIREMENT ⚠️
+Durable technical knowledge lives in the LLM Wiki under `.llm-wiki/wiki/**` (see
+"Project Wiki" below). Treat wiki updates as part
+of the implementation, not an afterthought.
 
-**Documentation is NOT optional. It is part of the implementation.**
+**When you change code, update the wiki in the same session** if the change affects:
 
-When you change code, you MUST update the corresponding documentation in the SAME work session. This is not a suggestion—it is a requirement for marking work as complete.
+- API integration (endpoints, request/response shapes) -> `entities/cape-api`
+- Type definitions -> `concepts/data-models`
+- Architecture, patterns, or data flow -> `syntheses/cape-frontend-architecture-overview`
+- Features or user-facing behavior -> the relevant `analyses/*` feature page
+- External integrations or dependencies -> `concepts/external-dependencies-and-boundaries`
+- Environment, setup, or tooling -> `concepts/dev-environment-and-tooling`
+- Coding style or conventions -> `concepts/coding-style-and-conventions`
 
-### Technical Documentation (`notes/` directory)
-
-The `notes/` directory contains comprehensive technical documentation that **MUST be kept in sync** with code changes:
-
-- **01-overview.md** - Project purpose, tech stack, goals, environment
-- **02-architecture.md** - System design, patterns, data flow
-- **03-api-endpoints.md** - Complete API reference with request/response schemas
-- **04-data-types.md** - All TypeScript interfaces and types
-- **05-functionality.md** - Feature explanations and implementation details
-- **06-external-interactions.md** - External systems integration (AWS, APIs, libraries)
-- **07-user-workflows.md** - User interaction flows with success/error states
-- **08-submit-page-walkthrough.md** - Detailed Submit component walkthrough (partially archived)
-- **09-workflows-api-analysis.md** - Workflows API analysis and design decisions
-- **10-workflows-submission-monitoring.md** - Workflow submission and monitoring
-- **11-workflow-submit-ui-design.md** - UI design for workflow submission
-- **12-coding-style-guide.md** - Comprehensive coding style patterns and examples
-
-### When to Update Documentation (MANDATORY)
-
-**You MUST update documentation when you change:**
-
-1. **API Integration**:
-    - New/removed/modified endpoints → Update `03-api-endpoints.md`
-    - Changed request/response schemas → Update `03-api-endpoints.md`
-    - New query parameters or headers → Update `03-api-endpoints.md`
-
-2. **Type Definitions**:
-    - New/modified TypeScript interfaces → Update `04-data-types.md`
-    - Changed field names or types → Update `04-data-types.md`
-    - New constants or utility types → Update `04-data-types.md`
-
-3. **Architecture or Patterns**:
-    - New patterns or design decisions → Update `02-architecture.md`
-    - Changed data flow or component structure → Update `02-architecture.md`
-    - Modified state management approach → Update `02-architecture.md`
-
-4. **Features or Functionality**:
-    - New features or functionality → Update `05-functionality.md`
-    - Modified user-facing behavior → Update `05-functionality.md` and `07-user-workflows.md`
-    - Changed validation or error handling → Update `05-functionality.md`
-
-5. **External Integration**:
-    - New external services or APIs → Update `06-external-interactions.md`
-    - Changed authentication flow → Update `06-external-interactions.md`
-    - Modified library usage → Update `06-external-interactions.md`
-
-6. **User Workflows**:
-    - New user workflows → Update `07-user-workflows.md`
-    - Changed UI interactions → Update `07-user-workflows.md`
-    - Modified error states or recovery paths → Update `07-user-workflows.md`
-
-7. **Environment or Setup**:
-    - New environment variables → Update `01-overview.md`
-    - Changed tech stack or dependencies → Update `01-overview.md`
-    - Modified development setup → Update `01-overview.md`
-
-8. **Code Examples in Documentation**:
-    - When you remove a function (like `getCliOptionsString()`), update ALL docs that reference it
-    - Replace outdated examples with current patterns
-    - Update `12-coding-style-guide.md` if function signatures change
-
-### How to Update Documentation
-
-**DO**:
-
-- Update docs in the SAME session as code changes
-- Search for references to changed/removed code: `grep -r "functionName" notes/`
-- Update type definitions to match actual implementation
-- Add update notes to archived sections explaining what changed
-- Update `NOTES.md` with summary of documentation changes
-
-**DON'T**:
-
-- Skip documentation updates "to save time"
-- Leave outdated examples or explanations
-- Assume someone else will update docs later
-- Mark work complete without verifying documentation accuracy
-
-### Documentation Review Checklist (MANDATORY)
-
-Before marking work complete, verify:
-
-- [ ] Code changes are reflected in relevant `notes/*.md` files
-- [ ] Type definitions match between code and `04-data-types.md`
-- [ ] API endpoint documentation matches actual implementation
-- [ ] User workflows are accurate for current UI behavior
-- [ ] No obsolete information remains in docs (old endpoints, removed features)
-- [ ] Examples in docs use current schemas and patterns
-- [ ] Cross-references between doc files are still valid
-- [ ] `NOTES.md` updated with comprehensive work summary
-- [ ] You searched for all references to changed/removed code in `notes/`
-
-### Why This Matters
-
-**Documentation drift is technical debt.** Outdated docs are worse than no docs because they actively mislead future developers and maintainers. Keeping docs synchronized with code:
-
-- Accelerates onboarding for new team members
-- Reduces debugging time (accurate API/type references)
-- Prevents reimplementation of existing features
-- Documents design decisions while context is fresh
-- Enables confident refactoring (clear current state vs. desired state)
-- Prevents wasting time debugging based on incorrect documentation
-
-**If you change code without updating documentation, the work is incomplete.**
+Search before writing to avoid duplicate pages, keep pages atomic and cross-linked,
+and periodically lint the wiki for orphans, missing links, and contradictions.
+Outdated documentation is worse than none - it actively misleads. If you change code
+without updating the wiki, the work is incomplete.
 
 ---
 
@@ -540,7 +372,7 @@ Global auth state is managed via `src/lib/user.svelte.ts` as a reactive module-l
 
 ### Style Guide Reference
 
-**Complete style guide**: See `notes/12-coding-style-guide.md` for comprehensive patterns
+**Complete style guide**: See `.llm-wiki/wiki/concepts/coding-style-and-conventions.md` for comprehensive patterns
 
 **Quick Reference**:
 
@@ -791,3 +623,38 @@ Components receive `baseUrl` as props. Current hardcoded value: `https://api.cap
 - **Svelte 5**: This project uses Svelte 5's new reactivity model (runes), not Svelte 4 patterns
 - **Authentication**: The app gates all functionality behind Cognito authentication (`{#if auth.user}`)
 - **Schema-Driven UI**: Pipeline submission forms are dynamically generated from backend JSON schemas, not hardcoded
+
+---
+
+## Project Wiki
+
+This repository maintains a persistent, interlinked knowledge base under `.llm-wiki/`
+using the LLM Wiki pattern. It is the single durable, cross-session knowledge base
+for this project: the wiki holds atomic, cross-linked pages that any agent can
+search and extend across sessions. Agents not using a wiki-aware tool can still read
+and edit the authored pages directly as plain Markdown.
+
+### Layout
+
+- `.llm-wiki/wiki/**` - authored knowledge pages (Markdown, Obsidian-style `[[wikilinks]]`).
+  This layer IS committed to the repository.
+- `.llm-wiki/raw/**` - immutable captured source packets. Ignored by git; never edit.
+- `.llm-wiki/meta/**` - generated registry, backlinks, index, log. Ignored by git; never
+  edit by hand (regenerate instead).
+- `.llm-wiki/outputs/**`, `.llm-wiki/.discoveries/**` - generated/scratch. Ignored by git.
+- `.llm-wiki/config.json`, `.llm-wiki/WIKI_SCHEMA.md`, `.llm-wiki/templates/` - committed
+  config and operating rules.
+
+### Rules for agents
+
+- Edit only `.llm-wiki/wiki/**`. Treat `raw/` as immutable and `meta/` as generated.
+- Pages are atomic: one page per thing, kebab-case filenames, cross-linked with
+  `[[wikilinks]]`. Page types: `entity`, `concept`, `synthesis`, `analysis`,
+  `requirement`, `source` (see `.llm-wiki/WIKI_SCHEMA.md`).
+- Cite sources with `[[sources/...]]` links where a page derives from a captured source.
+- Start non-trivial work by searching the wiki for relevant prior knowledge; at the end of
+  meaningful work, record durable, reusable insights as new or updated pages.
+- If metadata looks stale, regenerate it rather than editing `meta/` by hand. Periodically
+  lint for orphans, missing pages, and contradictions.
+- Do not commit the ignored layers (`meta/`, `raw/`, `outputs/`, `.discoveries/`); the
+  `.gitignore` block already enforces this. Only the authored `wiki/**` layer is tracked.

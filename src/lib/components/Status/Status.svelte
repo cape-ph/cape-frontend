@@ -1,16 +1,9 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
     import { SvelteMap } from 'svelte/reactivity';
-    import { getStoredWorkflowRuns, removeWorkflowRun } from '$lib/workflowRunsStorage';
-    import {
-        workflowRuns,
-        setStoredRuns,
-        setLiveStatus,
-        getLiveStatus,
-        removeStoredRun
-    } from '$lib/workflowRuns.svelte';
-    import { getWorkflowRun, getTaskInstances } from '$lib/workflowStatus';
-    import type { TaskInstance } from '$lib/workflowStatus';
+    import { getMyWorkflowRuns, getWorkflowRun, getTaskInstances } from '$lib/workflowStatus';
+    import type { TaskInstance, WorkflowRun } from '$lib/workflowStatus';
+    import { readWorkflowSnapshot, writeWorkflowSnapshot } from '$lib/workflowCache';
     import WorkflowRunCard from './WorkflowRunCard.svelte';
 
     let { baseUrl, onSelectRun, onNavigateToSubmit } = $props<{
@@ -19,22 +12,34 @@
         onNavigateToSubmit: () => void;
     }>();
 
-    let refreshInterval: number | undefined;
-    let isRefreshing = $state(false);
-    let showUnavailable = $state(false);
-
     const REFRESH_INTERVAL = 30000; // 30 seconds
-    const UNAVAILABLE_PRUNE_DAYS = 30;
+
+    // Runs are sourced from the CAPE API (Airflow state), scoped to the current
+    // user server-side. No client-side (cookie) tracking is involved.
+    let runs = $state<WorkflowRun[]>([]);
+    // Task instances per run, keyed by dag_run_id (SvelteMap tracks mutations).
+    let taskInstancesMap = new SvelteMap<string, TaskInstance[]>();
+    let isLoading = $state(true);
+    let isRefreshing = $state(false);
+    let loadError = $state<string | null>(null);
+    let refreshInterval: number | undefined;
 
     onMount(() => {
-        // Load stored runs from cookies
-        const stored = getStoredWorkflowRuns();
-        setStoredRuns(stored);
+        // Paint the last-known runs immediately (stale-while-revalidate) so a
+        // tab switch or reload does not flash the empty loading placeholder.
+        const cached = readWorkflowSnapshot();
+        if (cached && cached.runs.length > 0) {
+            runs = cached.runs;
+            taskInstancesMap.clear();
+            for (const [dagRunId, instances] of Object.entries(cached.taskInstances)) {
+                taskInstancesMap.set(dagRunId, instances);
+            }
+            isLoading = false;
+        }
 
-        // Fetch initial status for all runs
         refreshAllRuns();
 
-        // Set up polling for running workflows
+        // Poll running workflows for status updates.
         refreshInterval = window.setInterval(() => {
             refreshRunningWorkflows();
         }, REFRESH_INTERVAL);
@@ -50,128 +55,68 @@
         if (isRefreshing) return;
         isRefreshing = true;
 
-        const promises = workflowRuns.stored.map(async (run) => {
-            try {
-                const [workflowRun, taskInstancesResponse] = await Promise.all([
-                    getWorkflowRun(baseUrl, run.dagId, run.dagRunId),
-                    getTaskInstances(baseUrl, run.dagId, run.dagRunId)
-                ]);
-
-                setLiveStatus(run.dagId, run.dagRunId, {
-                    run: workflowRun,
-                    isAvailable: true,
-                    lastFetched: Date.now()
-                });
-
-                // Store task instances separately
-                taskInstancesMap.set(
-                    `${run.dagId}::${run.dagRunId}`,
-                    taskInstancesResponse.task_instances
-                );
-            } catch (err) {
-                console.error(`Failed to fetch workflow run ${run.dagRunId}:`, err);
-                setLiveStatus(run.dagId, run.dagRunId, {
-                    run: null,
-                    isAvailable: false,
-                    lastFetched: Date.now(),
-                    error: err instanceof Error ? err.message : String(err)
-                });
-            }
-        });
-
-        await Promise.all(promises);
-        pruneOldUnavailableRuns();
-        isRefreshing = false;
+        try {
+            const myRuns = await getMyWorkflowRuns(baseUrl);
+            runs = myRuns;
+            loadError = null;
+            await Promise.all(myRuns.map((run) => refreshTaskInstances(run)));
+            persistSnapshot();
+        } catch (err) {
+            console.error('Failed to load workflow runs:', err);
+            loadError = err instanceof Error ? err.message : String(err);
+        } finally {
+            isLoading = false;
+            isRefreshing = false;
+        }
     }
 
     async function refreshRunningWorkflows() {
         if (isRefreshing) return;
 
-        const runningRuns = workflowRuns.stored.filter((run) => {
-            const status = getLiveStatus(run.dagId, run.dagRunId);
-            return status?.run?.state === 'running' || status?.run?.state === 'queued';
-        });
-
-        if (runningRuns.length === 0) return;
+        const activeRuns = runs.filter((run) => run.state === 'running' || run.state === 'queued');
+        if (activeRuns.length === 0) return;
 
         isRefreshing = true;
-
-        const promises = runningRuns.map(async (run) => {
-            try {
-                const [workflowRun, taskInstancesResponse] = await Promise.all([
-                    getWorkflowRun(baseUrl, run.dagId, run.dagRunId),
-                    getTaskInstances(baseUrl, run.dagId, run.dagRunId)
-                ]);
-
-                setLiveStatus(run.dagId, run.dagRunId, {
-                    run: workflowRun,
-                    isAvailable: true,
-                    lastFetched: Date.now()
-                });
-
-                taskInstancesMap.set(
-                    `${run.dagId}::${run.dagRunId}`,
-                    taskInstancesResponse.task_instances
-                );
-            } catch (err) {
-                console.error(`Failed to refresh workflow run ${run.dagRunId}:`, err);
-            }
-        });
-
-        await Promise.all(promises);
-        isRefreshing = false;
+        try {
+            await Promise.all(
+                activeRuns.map(async (run) => {
+                    try {
+                        const updated = await getWorkflowRun(baseUrl, run.dag_id, run.dag_run_id);
+                        runs = runs.map((r) => (r.dag_run_id === updated.dag_run_id ? updated : r));
+                        await refreshTaskInstances(updated);
+                    } catch (err) {
+                        console.error(`Failed to refresh workflow run ${run.dag_run_id}:`, err);
+                    }
+                })
+            );
+            persistSnapshot();
+        } finally {
+            isRefreshing = false;
+        }
     }
 
-    function pruneOldUnavailableRuns() {
-        const now = Date.now();
-        const cutoffMs = UNAVAILABLE_PRUNE_DAYS * 24 * 60 * 60 * 1000;
-
-        workflowRuns.stored.forEach((run) => {
-            const status = getLiveStatus(run.dagId, run.dagRunId);
-            if (!status?.isAvailable) {
-                const submittedAt = new Date(run.submittedAt).getTime();
-                const ageMs = now - submittedAt;
-
-                if (ageMs > cutoffMs) {
-                    removeWorkflowRun(run.dagId, run.dagRunId);
-                    removeStoredRun(run.dagId, run.dagRunId);
-                }
-            }
-        });
+    async function refreshTaskInstances(run: WorkflowRun) {
+        try {
+            const response = await getTaskInstances(baseUrl, run.dag_id, run.dag_run_id);
+            taskInstancesMap.set(run.dag_run_id, response.task_instances);
+        } catch (err) {
+            console.error(`Failed to fetch task instances for ${run.dag_run_id}:`, err);
+        }
     }
 
-    function clearAllUnavailableRuns() {
-        const unavailableRuns = workflowRuns.stored.filter((run) => {
-            const status = getLiveStatus(run.dagId, run.dagRunId);
-            return !status?.isAvailable;
-        });
-
-        unavailableRuns.forEach((run) => {
-            removeWorkflowRun(run.dagId, run.dagRunId);
-            removeStoredRun(run.dagId, run.dagRunId);
-        });
+    function getTaskInstancesForRun(dagRunId: string): TaskInstance[] | null {
+        return taskInstancesMap.get(dagRunId) ?? null;
     }
 
-    // Store task instances in a reactive map (SvelteMap auto-tracks mutations)
-    let taskInstancesMap = new SvelteMap<string, TaskInstance[]>();
-
-    function getTaskInstancesForRun(dagId: string, dagRunId: string): TaskInstance[] | null {
-        return taskInstancesMap.get(`${dagId}::${dagRunId}`) ?? null;
+    // Persist the current runs + task instances so the next mount can render
+    // instantly while it revalidates. Keyed by user in the cache layer.
+    function persistSnapshot() {
+        const taskInstances: Record<string, TaskInstance[]> = {};
+        for (const [dagRunId, instances] of taskInstancesMap) {
+            taskInstances[dagRunId] = instances;
+        }
+        writeWorkflowSnapshot({ runs, taskInstances });
     }
-
-    const availableRuns = $derived(
-        workflowRuns.stored.filter((run) => {
-            const status = getLiveStatus(run.dagId, run.dagRunId);
-            return status?.isAvailable !== false;
-        })
-    );
-
-    const unavailableRuns = $derived(
-        workflowRuns.stored.filter((run) => {
-            const status = getLiveStatus(run.dagId, run.dagRunId);
-            return status?.isAvailable === false;
-        })
-    );
 </script>
 
 <div class="mb-6 space-y-2">
@@ -240,7 +185,27 @@
 </div>
 
 <div class="space-y-4">
-    {#if workflowRuns.stored.length === 0}
+    {#if isLoading}
+        <div
+            class="flex min-h-[400px] flex-col items-center justify-center rounded-lg border border-gray-300 bg-gray-50 p-12 text-center dark:border-gray-600 dark:bg-surface-900"
+        >
+            <span class="mb-3 animate-pulse text-lg text-gray-500 dark:text-gray-400"
+                >Loading your workflows...</span
+            >
+        </div>
+    {:else if loadError && runs.length === 0}
+        <div
+            class="flex min-h-[300px] flex-col items-center justify-center rounded-lg border border-rose-300 bg-rose-50 p-12 text-center dark:border-rose-800 dark:bg-rose-950/30"
+        >
+            <h3 class="mb-2 text-lg font-semibold text-rose-800 dark:text-rose-200">
+                Unable to load workflows
+            </h3>
+            <p class="mb-6 max-w-md text-sm text-rose-700 dark:text-rose-300">
+                {loadError}
+            </p>
+            <button class="btn variant-filled-primary" onclick={refreshAllRuns}>Try Again</button>
+        </div>
+    {:else if runs.length === 0}
         <!-- Enhanced empty state with Submit button -->
         <div
             class="flex min-h-[400px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-12 text-center dark:border-gray-600 dark:bg-surface-900"
@@ -289,104 +254,24 @@
             </button>
         </div>
     {:else}
-        <!-- Available workflows -->
-        {#each availableRuns as run, index (run.dagRunId)}
-            {@const status = getLiveStatus(run.dagId, run.dagRunId)}
-            {@const taskInstances = getTaskInstancesForRun(run.dagId, run.dagRunId)}
+        {#if loadError}
+            <div
+                class="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300"
+                role="status"
+            >
+                Couldn't refresh workflows ({loadError}). Showing the last loaded results.
+            </div>
+        {/if}
+        {#each runs as run, index (run.dag_run_id)}
+            {@const taskInstances = getTaskInstancesForRun(run.dag_run_id)}
             <div class="animate-fade-in-up" style="animation-delay: {index * 50}ms">
                 <WorkflowRunCard
-                    storedRun={run}
-                    liveRun={status?.run ?? null}
+                    {run}
                     {taskInstances}
-                    isAvailable={status?.isAvailable ?? true}
-                    onViewDetails={() => onSelectRun(run.dagId, run.dagRunId)}
+                    onViewDetails={() => onSelectRun(run.dag_id, run.dag_run_id)}
                 />
             </div>
         {/each}
-
-        <!-- Unavailable workflows section (collapsible) -->
-        {#if unavailableRuns.length > 0}
-            <div class="mt-8 border-t border-gray-300 pt-6 dark:border-gray-600">
-                <div
-                    class="mb-4 flex items-center justify-between rounded-lg bg-gray-100 p-4 dark:bg-surface-900"
-                >
-                    <button
-                        class="flex flex-1 items-center gap-3 text-left"
-                        onclick={() => (showUnavailable = !showUnavailable)}
-                        aria-expanded={showUnavailable}
-                        aria-label="Toggle unavailable workflows section"
-                    >
-                        <svg
-                            class="h-5 w-5 transition-transform duration-200 {showUnavailable
-                                ? 'rotate-90'
-                                : ''}"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                            aria-hidden="true"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M9 5l7 7-7 7"
-                            />
-                        </svg>
-                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                            Unavailable Workflows
-                        </h3>
-                        <span
-                            class="rounded-full bg-gray-300 px-2.5 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300"
-                        >
-                            {unavailableRuns.length}
-                        </span>
-                    </button>
-                    <button
-                        class="rounded-lg bg-rose-100 px-4 py-2 font-semibold text-rose-700 transition-all duration-200 hover:bg-rose-200 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 dark:bg-rose-900/30 dark:text-rose-300 dark:hover:bg-rose-900/50"
-                        onclick={(e) => {
-                            e.stopPropagation();
-                            clearAllUnavailableRuns();
-                        }}
-                        aria-label="Clear all unavailable workflows"
-                    >
-                        Clear All
-                    </button>
-                </div>
-
-                {#if showUnavailable}
-                    <div
-                        class="rounded-lg border border-gray-300 bg-white p-4 dark:border-gray-600 dark:bg-surface-950"
-                    >
-                        <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
-                            These workflows are no longer available in the system. They may have
-                            been removed or exceeded the retention period. Unavailable workflows are
-                            automatically pruned after {UNAVAILABLE_PRUNE_DAYS} days.
-                        </p>
-                        <div class="space-y-3">
-                            {#each unavailableRuns as run, index (run.dagRunId)}
-                                {@const status = getLiveStatus(run.dagId, run.dagRunId)}
-                                {@const taskInstances = getTaskInstancesForRun(
-                                    run.dagId,
-                                    run.dagRunId
-                                )}
-                                <div
-                                    class="animate-fade-in-up"
-                                    style="animation-delay: {index * 50}ms"
-                                >
-                                    <WorkflowRunCard
-                                        storedRun={run}
-                                        liveRun={status?.run ?? null}
-                                        {taskInstances}
-                                        isAvailable={false}
-                                        onViewDetails={() => onSelectRun(run.dagId, run.dagRunId)}
-                                    />
-                                </div>
-                            {/each}
-                        </div>
-                    </div>
-                {/if}
-            </div>
-        {/if}
     {/if}
 </div>
 

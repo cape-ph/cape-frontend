@@ -1,12 +1,9 @@
 <script lang="ts">
     import type { WorkflowRun, TaskInstance } from '$lib/workflowStatus';
-    import type { StoredWorkflowRun } from '$lib/workflowRunsStorage';
 
-    let { storedRun, liveRun, taskInstances, isAvailable, onViewDetails } = $props<{
-        storedRun: StoredWorkflowRun;
-        liveRun: WorkflowRun | null;
+    let { run, taskInstances, onViewDetails } = $props<{
+        run: WorkflowRun;
         taskInstances: TaskInstance[] | null;
-        isAvailable: boolean;
         onViewDetails: () => void;
     }>();
 
@@ -92,66 +89,49 @@
     const completedPercent = $derived(totalCount > 0 ? (completedCount / totalCount) * 100 : 0);
     const failedPercent = $derived(totalCount > 0 ? (failedCount / totalCount) * 100 : 0);
 
-    const submittedDate = $derived(new Date(storedRun.submittedAt).toLocaleString());
+    // Best-effort submission timestamp from the run's Airflow metadata.
+    const submittedDate = $derived(
+        new Date(run.logical_date ?? run.queued_at ?? run.start_date ?? Date.now()).toLocaleString()
+    );
 
-    const currentState = $derived(liveRun?.state ?? 'queued');
-    const stateStyle = $derived(stateConfig[currentState] ?? stateConfig.queued);
+    const stateStyle = $derived(stateConfig[run.state] ?? stateConfig.queued);
 
     // Determine if card needs failure accent border
     const needsAttention = $derived(
-        liveRun?.state === 'failed' ||
-            liveRun?.state === 'upstream_failed' ||
-            (failedCount > 0 && liveRun?.state === 'running')
+        run.state === 'failed' ||
+            run.state === 'upstream_failed' ||
+            (failedCount > 0 && run.state === 'running')
     );
 </script>
 
 <div
     class="rounded-lg border bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:bg-surface-950 {needsAttention
         ? 'border-l-4 border-rose-500 dark:border-rose-600'
-        : 'border-gray-300 dark:border-gray-600'} {!isAvailable
-        ? 'opacity-70 grayscale-[0.5]'
-        : ''}"
+        : 'border-gray-300 dark:border-gray-600'}"
     role="article"
-    aria-label="Workflow run {storedRun.dagId}"
+    aria-label="Workflow run {run.dag_id}"
 >
     <div class="p-4">
         <div class="mb-3 flex items-start justify-between">
             <div class="flex-1">
                 <h3 class="text-lg font-semibold tracking-tight text-gray-950 dark:text-gray-100">
-                    {storedRun.dagId}
+                    {run.dag_id}
                 </h3>
                 <p class="font-mono text-xs text-gray-500 dark:text-gray-400">
                     {submittedDate}
                 </p>
             </div>
-            {#if liveRun && isAvailable}
-                <span
-                    class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium {stateStyle.bg} {stateStyle.text}"
-                    role="status"
-                    aria-label="Workflow state: {liveRun.state}"
-                >
-                    <span class="text-base" aria-hidden="true">{stateStyle.icon}</span>
-                    <span>{liveRun.state}</span>
-                </span>
-            {:else if !isAvailable}
-                <span
-                    class="flex items-center gap-1.5 rounded-full bg-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400"
-                    role="status"
-                >
-                    <span class="text-base" aria-hidden="true">?</span>
-                    <span>unavailable</span>
-                </span>
-            {:else}
-                <span
-                    class="flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-                >
-                    <span class="animate-pulse">...</span>
-                    <span>loading</span>
-                </span>
-            {/if}
+            <span
+                class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium {stateStyle.bg} {stateStyle.text}"
+                role="status"
+                aria-label="Workflow state: {run.state}"
+            >
+                <span class="text-base" aria-hidden="true">{stateStyle.icon}</span>
+                <span>{run.state}</span>
+            </span>
         </div>
 
-        {#if liveRun && isAvailable && taskInstances}
+        {#if taskInstances}
             <div class="mb-2 flex items-center justify-between">
                 <div class="flex items-center gap-3 text-sm">
                     <span class="font-medium text-gray-700 dark:text-gray-300">Tasks:</span>
@@ -191,7 +171,7 @@
                     <!-- Completed segment (green) -->
                     {#if completedPercent > 0}
                         <div
-                            class="bg-emerald-500 transition-all duration-500 {liveRun.state ===
+                            class="bg-emerald-500 transition-all duration-500 {run.state ===
                             'running'
                                 ? 'animate-pulse'
                                 : ''}"
@@ -208,18 +188,12 @@
                     <!-- Pending/remaining is shown by the gray background -->
                 </div>
             </div>
-        {:else if !isAvailable}
-            <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
-                This workflow run is no longer available in the system. It may have been removed or
-                the retention period has expired.
-            </p>
         {/if}
 
         <button
             class="btn btn-sm variant-filled-primary transition-all duration-200 hover:scale-105 focus:ring-2 focus:ring-offset-2"
             onclick={onViewDetails}
-            disabled={!isAvailable}
-            aria-label="View details for workflow {storedRun.dagId}"
+            aria-label="View details for workflow {run.dag_id}"
         >
             View Details
         </button>

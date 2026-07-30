@@ -22,4 +22,8 @@ Thumbs.db
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-scratch
+# pi-llm-wiki: keep authored knowledge, drop generated + immutable layers
+.llm-wiki/meta/
+.llm-wiki/raw/
+.llm-wiki/outputs/
+.llm-wiki/.discoveries/

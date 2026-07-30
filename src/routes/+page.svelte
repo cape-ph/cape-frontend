@@ -7,8 +7,6 @@
     import HaltWorkflowModal from '$lib/components/Status/HaltWorkflowModal.svelte';
     import LoggingIn from '$lib/components/LoggingIn/LoggingIn.svelte';
     import { auth } from '$lib/user.svelte';
-    import { removeWorkflowRun } from '$lib/workflowRunsStorage';
-    import { removeStoredRun, getLiveStatus } from '$lib/workflowRuns.svelte';
     import { goto } from '$app/navigation';
     import { page } from '$app/stores';
     import { resolve } from '$app/paths';
@@ -118,14 +116,6 @@
         // Update URL to submit view
         goto(resolve('/?tab=workflows&view=submit' as `/?${string}`), { replaceState: false });
     }
-
-    function handleClearWorkflow() {
-        if (selectedDagId && selectedDagRunId) {
-            removeWorkflowRun(selectedDagId, selectedDagRunId);
-            removeStoredRun(selectedDagId, selectedDagRunId);
-            handleBackToList();
-        }
-    }
 </script>
 
 {#if auth.user}
@@ -150,16 +140,12 @@
                     {:else if workflowsView === 'submit'}
                         <Submit baseUrl={apiBase} onNavigateToDetail={handleSelectRun} />
                     {:else if workflowsView === 'detail' && selectedDagId && selectedDagRunId}
-                        {@const status = getLiveStatus(selectedDagId, selectedDagRunId)}
-                        {@const isAvailable = status?.isAvailable ?? true}
                         <StatusDetail
                             baseUrl={apiBase}
                             dagId={selectedDagId}
                             dagRunId={selectedDagRunId}
                             onBack={handleBackToList}
                             onHalt={handleOpenHaltModal}
-                            onClear={handleClearWorkflow}
-                            {isAvailable}
                         />
                         <HaltWorkflowModal
                             baseUrl={apiBase}
