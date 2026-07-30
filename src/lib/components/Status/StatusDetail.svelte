@@ -259,10 +259,6 @@
                             {formatDuration(workflowRun.start_date, workflowRun.end_date)}
                         </dd>
                     </div>
-                    <div>
-                        <dt class="font-medium text-gray-600 dark:text-gray-400">Triggered By</dt>
-                        <dd class="text-gray-900 dark:text-gray-100">{workflowRun.triggered_by}</dd>
-                    </div>
                 </dl>
                 {#if workflowRun.note}
                     <div class="mt-4 rounded-md bg-gray-100 p-3 dark:bg-gray-800">

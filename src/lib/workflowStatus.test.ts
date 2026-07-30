@@ -22,7 +22,6 @@ function buildRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
         last_scheduling_decision: null,
         run_type: 'manual',
         state: 'queued',
-        triggered_by: 'rest_api',
         conf: {},
         dag_versions: [],
         ...overrides

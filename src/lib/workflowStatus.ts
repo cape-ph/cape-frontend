@@ -38,7 +38,6 @@ export interface WorkflowRun {
     last_scheduling_decision: string | null;
     run_type: string;
     state: WorkflowRunState;
-    triggered_by: string;
     conf: Record<string, unknown>;
     note?: string;
     dag_versions: Array<{
