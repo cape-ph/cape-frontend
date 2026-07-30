@@ -19,10 +19,22 @@
 
         if (existing && !existing.expired) {
             setUser(existing);
-        } else {
-            // No session? Start redirect flow
-            await userManager.signinRedirect();
+            return;
         }
+
+        // Expired or missing session: try a silent renew (Cognito refresh token)
+        // before falling back to a full interactive redirect.
+        try {
+            const renewed = await userManager.signinSilent();
+            if (renewed && !renewed.expired) {
+                setUser(renewed);
+                return;
+            }
+        } catch (err) {
+            console.warn('Silent sign-in failed; redirecting to login', err);
+        }
+
+        await userManager.signinRedirect();
     });
 </script>
 
