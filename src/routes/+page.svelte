@@ -21,6 +21,7 @@
     let workflowsView = $state<'list' | 'submit' | 'detail'>('list');
     let selectedDagId = $state<string | null>(null);
     let selectedDagRunId = $state<string | null>(null);
+    let selectedSampleId = $state<string | null>(null);
     let showHaltModal = $state(false);
 
     const links = [
@@ -59,6 +60,11 @@
                 } else {
                     workflowsView = 'list';
                 }
+            }
+
+            // Restore the report tab's sample id from the URL.
+            if (activeKey === 'report') {
+                selectedSampleId = params.get('sampleId');
             }
         });
 
@@ -116,6 +122,15 @@
         // Update URL to submit view
         goto(resolve('/?tab=workflows&view=submit' as `/?${string}`), { replaceState: false });
     }
+
+    function handleReportSampleLoad(sampleId: string) {
+        selectedSampleId = sampleId;
+        // Reflect the loaded sample in the URL so a refresh or shared link
+        // reproduces the same reports.
+        goto(resolve(`/?tab=report&sampleId=${encodeURIComponent(sampleId)}` as `/?${string}`), {
+            replaceState: false
+        });
+    }
 </script>
 
 {#if auth.user}
@@ -159,7 +174,11 @@
                 </div>
             {:else if activeKey === 'report'}
                 <div class="w-full">
-                    <Report baseUrl={apiBase} reportId="bactopia-single-sample-analysis" />
+                    <Report
+                        baseUrl={apiBase}
+                        initialSampleId={selectedSampleId}
+                        onSampleLoad={handleReportSampleLoad}
+                    />
                 </div>
             {/if}
         </div>

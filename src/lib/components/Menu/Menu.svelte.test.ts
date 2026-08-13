@@ -47,4 +47,39 @@ describe('Menu.svelte', () => {
         await fireEvent.click(toggle);
         expect(toggle).toHaveAttribute('aria-expanded', 'false');
     });
+
+    it('closes the mobile menu when the backdrop is clicked', async () => {
+        render(Menu, {
+            props: {
+                links,
+                activeKey: 'upload',
+                onSelect: vi.fn()
+            }
+        });
+
+        const toggle = screen.getByRole('button', { expanded: false });
+        await fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+        await fireEvent.click(screen.getByRole('button', { name: 'Close navigation menu' }));
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('button', { name: 'Close navigation menu' })).toBeNull();
+    });
+
+    it('closes the mobile menu when Escape is pressed', async () => {
+        render(Menu, {
+            props: {
+                links,
+                activeKey: 'upload',
+                onSelect: vi.fn()
+            }
+        });
+
+        const toggle = screen.getByRole('button', { expanded: false });
+        await fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+        await fireEvent.keyDown(window, { key: 'Escape' });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    });
 });

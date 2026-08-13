@@ -398,7 +398,7 @@
                                         <span
                                             >Stage {index + 1}: {profile?.pipelineName ??
                                                 stage.pipelineId}{profile?.version
-                                                ? ` (v${profile.version})`
+                                                ? ` (${profile.version})`
                                                 : ''}</span
                                         >
                                         <span
