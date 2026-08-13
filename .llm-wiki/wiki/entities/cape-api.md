@@ -36,7 +36,11 @@ Object storage (S3 multipart brokering):
 
 Reports:
 
-- `GET /report/create?sampleId=&reportId=&format=html` -> report HTML
+- `GET /report/get?sampleId=` -> `{ [reportId: string]: string }`, a map of
+  report id to fully-formed HTML document. Used by the Report tab to show every
+  available report for a sample. An empty object means no reports exist yet.
+- `GET /report/create?sampleId=&reportId=&format=html` -> report HTML (single
+  report; no longer called by the frontend, retained for reference).
 
 `dag_run_id` uses the form `manual+YYYY-MM-DDTHH:MM:SS+00:00`. `PATCH /workflows/halt`
 is irreversible: it terminates running tasks and sets the run `state` to `failed`,

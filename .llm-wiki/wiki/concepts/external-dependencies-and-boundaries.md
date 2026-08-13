@@ -34,7 +34,9 @@ uses raw `document.cookie`, not this package).
 ## Trust boundaries
 
 - The browser trusts the CAPE API for schemas, presigned URLs, and report HTML.
-  Report HTML is rendered in a sandboxed iframe ([[analyses/report-viewing-feature]]).
+  Report HTML is rendered in a `sandbox="allow-same-origin"` iframe (no
+  `allow-scripts`), so it stays inert while being measurable for auto-sizing
+  ([[analyses/report-viewing-feature]]).
 - No secrets in the frontend; only `PUBLIC_*` env vars, injected at runtime via
   `$env/dynamic/public` ([[concepts/authentication-cognito]]).
 
