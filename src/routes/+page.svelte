@@ -131,6 +131,13 @@
             replaceState: false
         });
     }
+
+    // DEMO AUTO-RUN: jump to the new workflow's detail view once the automatic
+    // bactopia/kraken2 run starts after an upload.
+    function handleAutoRunStarted(dagId: string, dagRunId: string) {
+        activeKey = 'workflows';
+        handleSelectRun(dagId, dagRunId);
+    }
 </script>
 
 {#if auth.user}
@@ -142,6 +149,7 @@
                     <FileUpload
                         baseUrl={apiBase}
                         bucket="ccd-dlh-t-seqauto-input-raw-vbkt-s3-b8fded5"
+                        onAutoRunStarted={handleAutoRunStarted}
                     />
                 </div>
             {:else if activeKey === 'workflows'}

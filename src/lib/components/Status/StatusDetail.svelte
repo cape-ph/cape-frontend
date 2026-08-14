@@ -157,7 +157,7 @@
             {/if}
             <!-- Manual Refresh button -->
             <button
-                class="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 transition-all duration-200 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+                class="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 transition-all duration-200 hover:bg-gray-200 focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
                 onclick={handleManualRefresh}
                 disabled={isRefreshing}
                 aria-label="Refresh workflow details"
@@ -181,7 +181,7 @@
             </button>
             {#if workflowRun && (workflowRun.state === 'running' || workflowRun.state === 'queued')}
                 <button
-                    class="flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 font-semibold text-white transition-all duration-200 hover:bg-rose-700 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 dark:bg-rose-700 dark:hover:bg-rose-800"
+                    class="flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 font-semibold text-white transition-all duration-200 hover:scale-105 hover:bg-rose-700 focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 focus:outline-none dark:bg-rose-700 dark:hover:bg-rose-800"
                     onclick={onHalt}
                     aria-label="Halt workflow"
                 >
@@ -218,7 +218,7 @@
         <div class="space-y-6">
             <!-- Workflow summary card -->
             <div
-                class="rounded-lg border border-gray-300 bg-white p-6 shadow-sm dark:border-gray-600 dark:bg-surface-950"
+                class="dark:bg-surface-950 rounded-lg border border-gray-300 bg-white p-6 shadow-sm dark:border-gray-600"
             >
                 <h2 class="mb-4 text-2xl font-semibold text-gray-950 dark:text-gray-100">
                     {dagId}
@@ -272,7 +272,7 @@
 
             <!-- Task instances table -->
             <div
-                class="rounded-lg border border-gray-300 bg-white shadow-sm dark:border-gray-600 dark:bg-surface-950"
+                class="dark:bg-surface-950 rounded-lg border border-gray-300 bg-white shadow-sm dark:border-gray-600"
             >
                 <div class="border-b border-gray-300 p-4 dark:border-gray-600">
                     <h3 class="text-lg font-semibold text-gray-950 dark:text-gray-100">
@@ -281,7 +281,7 @@
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
-                        <thead class="bg-gray-50 dark:bg-surface-900">
+                        <thead class="dark:bg-surface-900 bg-gray-50">
                             <tr>
                                 <th
                                     class="px-4 py-3 text-left font-medium text-gray-700 dark:text-gray-300"
@@ -311,7 +311,7 @@
                         </thead>
                         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                             {#each taskInstances as task (task.id)}
-                                <tr class="hover:bg-gray-50 dark:hover:bg-surface-900">
+                                <tr class="dark:hover:bg-surface-900 hover:bg-gray-50">
                                     <td
                                         class="px-4 py-3 font-medium text-gray-900 dark:text-gray-100"
                                     >
@@ -362,7 +362,7 @@
                 Workflow Submission Details
             </h2>
             <div
-                class="rounded-lg border border-gray-300 bg-white p-4 shadow-sm dark:border-gray-600 dark:bg-surface-950"
+                class="dark:bg-surface-950 rounded-lg border border-gray-300 bg-white p-4 shadow-sm dark:border-gray-600"
             >
                 <p class="mb-4 text-sm text-gray-700 dark:text-gray-300">
                     This workflow was submitted with {pipelineConfigs.length} configured stage{pipelineConfigs.length !==
@@ -375,14 +375,14 @@
                         {@const optionsArray = Object.entries(stage.nextflowOptions ?? {})}
                         {@const profile = profileById.get(stage.pipelineId)}
                         <div
-                            class="rounded-lg border border-gray-300 bg-white shadow-sm dark:border-gray-600 dark:bg-surface-950"
+                            class="dark:bg-surface-950 rounded-lg border border-gray-300 bg-white shadow-sm dark:border-gray-600"
                         >
                             <details class="p-4">
                                 <summary
                                     class="flex cursor-pointer items-start gap-3 text-lg font-semibold"
                                 >
                                     <svg
-                                        class="mt-1 h-5 w-5 flex-shrink-0 transition-transform details-chevron"
+                                        class="details-chevron mt-1 h-5 w-5 flex-shrink-0 transition-transform"
                                         fill="none"
                                         stroke="currentColor"
                                         viewBox="0 0 24 24"
@@ -422,7 +422,7 @@
                                                         {key}
                                                     </span>
                                                     <div
-                                                        class="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-sm text-gray-900 dark:border-gray-600 dark:bg-surface-900 dark:text-gray-100"
+                                                        class="dark:bg-surface-900 rounded-md border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-sm text-gray-900 dark:border-gray-600 dark:text-gray-100"
                                                     >
                                                         {typeof value === 'object'
                                                             ? JSON.stringify(value)

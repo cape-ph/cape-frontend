@@ -44,7 +44,7 @@
                     />
                 {:else}
                     <div
-                        class="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-900 dark:bg-surface-700 dark:text-gray-100"
+                        class="dark:bg-surface-700 flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-900 dark:text-gray-100"
                     >
                         {email?.[0]?.toUpperCase()}
                     </div>
