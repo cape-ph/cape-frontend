@@ -135,7 +135,7 @@
         <div class="flex items-center gap-3">
             <!-- Manual Refresh button -->
             <button
-                class="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 transition-all duration-200 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 transition-all duration-200 hover:bg-gray-200 focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
                 onclick={refreshAllRuns}
                 disabled={isRefreshing}
                 aria-label="Refresh workflow list"
@@ -159,7 +159,7 @@
             </button>
             <!-- Submit Workflow button with matching height -->
             <button
-                class="flex items-center gap-2 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-primary-700 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:bg-primary-500 dark:hover:bg-primary-600"
+                class="bg-primary-600 hover:bg-primary-700 focus:ring-primary-500 dark:bg-primary-500 dark:hover:bg-primary-600 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white transition-all duration-200 hover:scale-105 focus:ring-2 focus:ring-offset-2 focus:outline-none"
                 onclick={onNavigateToSubmit}
                 aria-label="Submit new workflow"
                 title="Submit a new workflow"
@@ -187,7 +187,7 @@
 <div class="space-y-4">
     {#if isLoading}
         <div
-            class="flex min-h-[400px] flex-col items-center justify-center rounded-lg border border-gray-300 bg-gray-50 p-12 text-center dark:border-gray-600 dark:bg-surface-900"
+            class="dark:bg-surface-900 flex min-h-[400px] flex-col items-center justify-center rounded-lg border border-gray-300 bg-gray-50 p-12 text-center dark:border-gray-600"
         >
             <span class="mb-3 animate-pulse text-lg text-gray-500 dark:text-gray-400"
                 >Loading your workflows...</span
@@ -208,7 +208,7 @@
     {:else if runs.length === 0}
         <!-- Enhanced empty state with Submit button -->
         <div
-            class="flex min-h-[400px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-12 text-center dark:border-gray-600 dark:bg-surface-900"
+            class="dark:bg-surface-900 flex min-h-[400px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-12 text-center dark:border-gray-600"
         >
             <svg
                 class="mb-4 h-24 w-24 text-gray-400 dark:text-gray-500"

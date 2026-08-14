@@ -62,7 +62,7 @@
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
-            class="relative w-full max-w-md rounded-lg border border-gray-300 bg-white p-6 shadow-xl dark:border-gray-600 dark:bg-surface-950"
+            class="dark:bg-surface-950 relative w-full max-w-md rounded-lg border border-gray-300 bg-white p-6 shadow-xl dark:border-gray-600"
             onclick={(e) => e.stopPropagation()}
         >
             <h3
@@ -94,16 +94,15 @@
                 <textarea
                     id="halt-note"
                     bind:value={note}
-                    class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-surface-900 dark:text-gray-100 dark:placeholder-gray-400"
+                    class="focus:border-primary-500 focus:ring-primary-500 dark:bg-surface-900 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-500 focus:ring-1 focus:outline-none dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
                     rows="3"
                     placeholder="Explain why you're halting this workflow..."
-                    aria-label="Halt reason"
-                ></textarea>
+                    aria-label="Halt reason"></textarea>
             </div>
 
             <div class="flex justify-end gap-3">
                 <button
-                    class="rounded-lg bg-gray-200 px-6 py-2.5 font-semibold text-gray-700 transition-all duration-200 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                    class="rounded-lg bg-gray-200 px-6 py-2.5 font-semibold text-gray-700 transition-all duration-200 hover:bg-gray-300 focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 focus:outline-none dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
                     onclick={handleCancel}
                     disabled={isSubmitting}
                     aria-label="Cancel"
@@ -111,7 +110,7 @@
                     Cancel
                 </button>
                 <button
-                    class="rounded-lg bg-rose-600 px-6 py-2.5 font-semibold text-white transition-all duration-200 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 dark:bg-rose-700 dark:hover:bg-rose-800"
+                    class="rounded-lg bg-rose-600 px-6 py-2.5 font-semibold text-white transition-all duration-200 hover:bg-rose-700 focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-rose-700 dark:hover:bg-rose-800"
                     onclick={handleHalt}
                     disabled={isSubmitting}
                     aria-label="Confirm halt workflow"

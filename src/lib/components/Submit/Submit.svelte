@@ -433,7 +433,7 @@
                 <select
                     id="workflow-selection"
                     name="workflow-selection"
-                    class="select select-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100"
+                    class="select select-bordered dark:bg-surface-950 bg-white text-gray-950 dark:text-gray-100"
                     bind:value={selectedWorkflowDagId}
                     aria-label="Select workflow"
                     disabled={!workflows}
@@ -461,7 +461,7 @@
         <section class="space-y-3">
             <h2 class="text-lg font-semibold">Workflow Overview</h2>
             <div
-                class="rounded-lg border border-gray-300 bg-white p-4 shadow-sm dark:border-gray-600 dark:bg-surface-950"
+                class="dark:bg-surface-950 rounded-lg border border-gray-300 bg-white p-4 shadow-sm dark:border-gray-600"
             >
                 <p class="mb-4 text-sm text-gray-700 dark:text-gray-300">
                     This workflow runs {workflowProfiles.length} analysis stage{workflowProfiles.length !==
@@ -520,7 +520,7 @@
                     {@const stageErrorCount = getStageErrorCount(stageId)}
                     {@const stageSchemaError = getStageSchemaError(stageId)}
                     <div
-                        class="rounded-lg border bg-white shadow-sm dark:bg-surface-950 {stageErrorCount >
+                        class="dark:bg-surface-950 rounded-lg border bg-white shadow-sm {stageErrorCount >
                         0
                             ? 'border-2 border-red-500'
                             : 'border-gray-300 dark:border-gray-600'}"
@@ -530,7 +530,7 @@
                                 class="flex cursor-pointer items-start gap-3 text-lg font-semibold"
                             >
                                 <svg
-                                    class="mt-1 h-5 w-5 flex-shrink-0 transition-transform details-chevron"
+                                    class="details-chevron mt-1 h-5 w-5 flex-shrink-0 transition-transform"
                                     fill="none"
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
@@ -613,7 +613,7 @@
                                                     <textarea
                                                         id={getFieldId(stageId, field.key)}
                                                         name={field.key}
-                                                        class="input input-bordered no-scrollbar h-[2.21rem] min-h-[2.21rem] w-full resize-none overflow-x-auto overflow-y-hidden whitespace-nowrap bg-gray-50 text-base leading-normal text-gray-600 dark:bg-surface-900 dark:text-gray-400"
+                                                        class="input input-bordered no-scrollbar dark:bg-surface-900 h-[2.21rem] min-h-[2.21rem] w-full resize-none overflow-x-auto overflow-y-hidden bg-gray-50 text-base leading-normal whitespace-nowrap text-gray-600 dark:text-gray-400"
                                                         value={asString(stageOpts[field.key])}
                                                         readonly
                                                         rows="1"
@@ -626,7 +626,7 @@
                                                     <select
                                                         id={getFieldId(stageId, field.key)}
                                                         name={field.key}
-                                                        class="select select-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100 {fieldError
+                                                        class="select select-bordered dark:bg-surface-950 bg-white text-gray-950 dark:text-gray-100 {fieldError
                                                             ? 'border-2 border-red-500'
                                                             : ''}"
                                                         value={asString(stageOpts[field.key])}
@@ -672,7 +672,7 @@
                                                     <input
                                                         id={getFieldId(stageId, field.key)}
                                                         name={field.key}
-                                                        class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100 {fieldError
+                                                        class="input input-bordered dark:bg-surface-950 bg-white text-gray-950 dark:text-gray-100 {fieldError
                                                             ? 'border-2 border-red-500'
                                                             : ''}"
                                                         type="text"
@@ -700,7 +700,7 @@
                                                     <input
                                                         id={getFieldId(stageId, field.key)}
                                                         name={field.key}
-                                                        class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100 {fieldError
+                                                        class="input input-bordered dark:bg-surface-950 bg-white text-gray-950 dark:text-gray-100 {fieldError
                                                             ? 'border-2 border-red-500'
                                                             : ''}"
                                                         type="text"
@@ -764,7 +764,7 @@
 
     <section>
         <details
-            class="rounded-lg border border-gray-300 bg-white p-4 dark:border-gray-600 dark:bg-surface-950"
+            class="dark:bg-surface-950 rounded-lg border border-gray-300 bg-white p-4 dark:border-gray-600"
         >
             <summary class="flex cursor-pointer items-center gap-2 text-lg font-semibold">
                 <svg
@@ -786,12 +786,11 @@
             <textarea
                 id="submission-json-preview"
                 name="submission-json-preview"
-                class="textarea textarea-bordered mt-3 min-h-[220px] w-full bg-gray-50 font-mono text-sm leading-5 text-gray-600 dark:bg-surface-900 dark:text-gray-400"
+                class="textarea textarea-bordered dark:bg-surface-900 mt-3 min-h-[220px] w-full bg-gray-50 font-mono text-sm leading-5 text-gray-600 dark:text-gray-400"
                 aria-label="Submission JSON preview"
                 readonly
                 spellcheck="false"
-                value={workflowJsonPreview}
-            ></textarea>
+                value={workflowJsonPreview}></textarea>
         </details>
     </section>
 
