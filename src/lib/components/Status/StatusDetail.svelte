@@ -10,12 +10,13 @@
     import type { PipelineProfile } from '$lib/pipeline';
     import { readWorkflowSnapshot, updateCachedRun } from '$lib/workflowCache';
 
-    let { baseUrl, dagId, dagRunId, onBack, onHalt } = $props<{
+    let { baseUrl, dagId, dagRunId, onBack, onHalt, onViewReport } = $props<{
         baseUrl: string;
         dagId: string;
         dagRunId: string;
         onBack: () => void;
         onHalt: () => void;
+        onViewReport?: (sampleId: string) => void;
     }>();
 
     let workflowRun = $state<WorkflowRun | null>(null);
@@ -28,6 +29,22 @@
     // Submission details are reconstructed from the run's Airflow conf
     // (conf.pipelineConfigs), not from client-side storage.
     const pipelineConfigs = $derived(workflowRun ? getPipelineConfigsFromRun(workflowRun) : []);
+
+    // The report is keyed by the sample name, which the workflow carries as the
+    // `--sample` option on one of its stages (the bactopia ONT stage).
+    const reportSampleId = $derived(deriveSampleId(pipelineConfigs));
+
+    function deriveSampleId(
+        configs: { nextflowOptions?: Record<string, unknown> }[]
+    ): string | null {
+        for (const config of configs) {
+            const sample = config.nextflowOptions?.['--sample'];
+            if (typeof sample === 'string' && sample.trim() !== '') {
+                return sample;
+            }
+        }
+        return null;
+    }
 
     // Stage profiles are fetched (cached) only to show friendly names/versions;
     // conf.pipelineConfigs alone carries the actual submitted parameters.
@@ -200,6 +217,28 @@
                         />
                     </svg>
                     <span>Halt</span>
+                </button>
+            {:else if workflowRun && workflowRun.state === 'success' && reportSampleId && onViewReport}
+                <button
+                    class="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white transition-all duration-200 hover:scale-105 hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:outline-none dark:bg-emerald-700 dark:hover:bg-emerald-800"
+                    onclick={() => onViewReport?.(reportSampleId)}
+                    aria-label="View report for this workflow's sample"
+                >
+                    <svg
+                        class="h-5 w-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                        />
+                    </svg>
+                    <span>View report</span>
                 </button>
             {/if}
         </div>

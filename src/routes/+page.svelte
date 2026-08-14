@@ -138,6 +138,15 @@
         activeKey = 'workflows';
         handleSelectRun(dagId, dagRunId);
     }
+
+    // Jump from a finished workflow's detail view to its sample's report.
+    function handleViewReport(sampleId: string) {
+        activeKey = 'report';
+        selectedSampleId = sampleId;
+        goto(resolve(`/?tab=report&sampleId=${encodeURIComponent(sampleId)}` as `/?${string}`), {
+            replaceState: false
+        });
+    }
 </script>
 
 {#if auth.user}
@@ -169,6 +178,7 @@
                             dagRunId={selectedDagRunId}
                             onBack={handleBackToList}
                             onHalt={handleOpenHaltModal}
+                            onViewReport={handleViewReport}
                         />
                         <HaltWorkflowModal
                             baseUrl={apiBase}
