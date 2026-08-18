@@ -15,8 +15,13 @@
 
     const REFRESH_INTERVAL = 30000; // 30 seconds
 
+    type Report = {
+        createdAt: string;
+        body: string;
+    };
+
     let sampleId = $state('');
-    let reports = $state<Record<string, string>>({});
+    let reports = $state<Record<string, Report>>({});
     // Per-report open/closed state, keyed by report id and preserved across
     // refreshes so a background refresh never re-expands a report the user
     // collapsed. Reports absent from this map default to expanded.
@@ -37,7 +42,12 @@
     let refreshInterval: number | undefined;
     let reportsContainer = $state<HTMLDivElement | undefined>(undefined);
 
-    const reportEntries = $derived(Object.entries(reports));
+    // Oldest report first. Entries without a parseable createdAt sort last.
+    const reportEntries = $derived(
+        Object.entries(reports).sort(
+            ([, a], [, b]) => createdAtTime(a.createdAt) - createdAtTime(b.createdAt)
+        )
+    );
     const hasReports = $derived(reportEntries.length > 0);
     // Reports are generated asynchronously and more can appear over time, so
     // poll on an interval for as long as a sample is loaded, mirroring the
@@ -99,6 +109,28 @@
             return reportId;
         }
         return cleaned.replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+
+    // Sortable time for a createdAt string; unparseable/missing sorts last.
+    function createdAtTime(createdAt: string): number {
+        const time = Date.parse(createdAt);
+        return Number.isNaN(time) ? Infinity : time;
+    }
+
+    // Render createdAt in the browser's local timezone, including the zone name.
+    function formatCreatedAt(createdAt: string): string {
+        const time = Date.parse(createdAt);
+        if (Number.isNaN(time)) {
+            return '';
+        }
+        return new Intl.DateTimeFormat(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            timeZoneName: 'short'
+        }).format(time);
     }
 
     async function onLoad() {
@@ -202,24 +234,43 @@
         }
     }
 
-    // The endpoint returns a { reportId: html } map. Keep only string-valued
-    // entries so a malformed payload cannot break rendering.
-    function normalizeReports(data: unknown): Record<string, string> {
+    // The endpoint returns a { reportId: { createdAt, body } } map. Keep only
+    // entries with a string body (tolerating a legacy plain-string value) so a
+    // malformed payload cannot break rendering.
+    function normalizeReports(data: unknown): Record<string, Report> {
         if (!data || typeof data !== 'object') {
             return {};
         }
-        const entries = Object.entries(data as Record<string, unknown>).filter(
-            ([, value]) => typeof value === 'string'
-        ) as [string, string][];
-        return Object.fromEntries(entries);
+        const result: Record<string, Report> = {};
+        for (const [id, value] of Object.entries(data as Record<string, unknown>)) {
+            if (typeof value === 'string') {
+                result[id] = { createdAt: '', body: value };
+            } else if (
+                value &&
+                typeof value === 'object' &&
+                typeof (value as { body?: unknown }).body === 'string'
+            ) {
+                const entry = value as { body: string; createdAt?: unknown };
+                result[id] = {
+                    createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : '',
+                    body: entry.body
+                };
+            }
+        }
+        return result;
     }
 
-    function reportsEqual(a: Record<string, string>, b: Record<string, string>): boolean {
+    function reportsEqual(a: Record<string, Report>, b: Record<string, Report>): boolean {
         const aKeys = Object.keys(a);
         if (aKeys.length !== Object.keys(b).length) {
             return false;
         }
-        return aKeys.every((key) => a[key] === b[key]);
+        return aKeys.every(
+            (key) =>
+                b[key] !== undefined &&
+                a[key].body === b[key].body &&
+                a[key].createdAt === b[key].createdAt
+        );
     }
 
     function isReportExpanded(reportId: string): boolean {
@@ -372,7 +423,8 @@
 
     {#if hasReports}
         <div class="space-y-4" bind:this={reportsContainer}>
-            {#each reportEntries as [reportId, reportHtml] (reportId)}
+            {#each reportEntries as [reportId, report] (reportId)}
+                {@const created = formatCreatedAt(report.createdAt)}
                 <div
                     class="dark:bg-surface-950 rounded-lg border border-gray-300 bg-white shadow-sm dark:border-gray-600"
                 >
@@ -398,12 +450,19 @@
                                     d="M19 9l-7 7-7-7"
                                 />
                             </svg>
-                            <span class="min-w-0 flex-1">{reportTitle(reportHtml, reportId)}</span>
+                            <span class="min-w-0 flex-1">{reportTitle(report.body, reportId)}</span>
+                            {#if created}
+                                <span
+                                    class="flex-shrink-0 text-xs font-normal whitespace-nowrap text-gray-500 dark:text-gray-400"
+                                >
+                                    {created}
+                                </span>
+                            {/if}
                         </summary>
                         <div class="mt-3">
                             <iframe
                                 title="Report: {reportId}"
-                                srcdoc={reportHtml}
+                                srcdoc={report.body}
                                 sandbox="allow-same-origin"
                                 referrerpolicy="no-referrer"
                                 scrolling="no"
