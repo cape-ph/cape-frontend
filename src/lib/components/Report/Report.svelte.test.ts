@@ -184,6 +184,47 @@ describe('Report.svelte', () => {
         expect(screen.getByRole('button', { name: 'Refresh reports' })).toBeInTheDocument();
     });
 
+    it('orders reports oldest-first and renders each createdAt in local time', async () => {
+        const older = '2026-01-02T10:00:00Z';
+        const newer = '2026-06-03T15:30:00Z';
+        vi.mocked(axios.get).mockResolvedValue({
+            data: {
+                bactopia: { createdAt: older, body: reportHtml('Bactopia', 'old report') },
+                rabits: { createdAt: newer, body: reportHtml('RABiTS', 'new report') }
+            }
+        });
+
+        render(Report, {
+            props: {
+                baseUrl: 'https://api.example.test'
+            }
+        });
+
+        await fireEvent.input(screen.getByLabelText('Sample ID'), {
+            target: { value: 'sample-123' }
+        });
+        await fireEvent.click(screen.getByRole('button', { name: 'Load Reports' }));
+
+        await screen.findByText('RABiTS');
+
+        const titles = Array.from(document.querySelectorAll('details summary')).map((summary) =>
+            summary.querySelector('span')?.textContent?.trim()
+        );
+        // Oldest report (Bactopia) is listed before the newer one (RABiTS).
+        expect(titles.indexOf('Bactopia')).toBeLessThan(titles.indexOf('RABiTS'));
+
+        // createdAt is formatted in the browser's local timezone.
+        const expected = new Intl.DateTimeFormat(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            timeZoneName: 'short'
+        }).format(Date.parse(newer));
+        expect(screen.getByText(expected)).toBeInTheDocument();
+    });
+
     it('shows an empty state and auto-refresh indicator when no reports are available', async () => {
         vi.mocked(axios.get).mockResolvedValue({ data: {} });
 
