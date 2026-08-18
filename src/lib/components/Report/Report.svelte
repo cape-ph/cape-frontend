@@ -41,6 +41,9 @@
     let requestSequence = 0;
     let refreshInterval: number | undefined;
     let reportsContainer = $state<HTMLDivElement | undefined>(undefined);
+    // Watches each report document's own size so the container follows content
+    // that grows or shrinks after load (e.g. report scripts expanding rows).
+    let contentResizeObserver: ResizeObserver | undefined;
 
     // Oldest report first. Entries without a parseable createdAt sort last.
     const reportEntries = $derived(
@@ -67,6 +70,18 @@
             }
         }, REFRESH_INTERVAL);
 
+        // Map an observed report element back to its iframe (same-origin) and
+        // re-measure it whenever its content height changes.
+        contentResizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const iframe = entry.target.ownerDocument?.defaultView
+                    ?.frameElement as HTMLIFrameElement | null;
+                if (iframe) {
+                    resizeIframe(iframe);
+                }
+            }
+        });
+
         window.addEventListener('resize', resizeAllIframes);
     });
 
@@ -74,6 +89,7 @@
         if (refreshInterval !== undefined) {
             clearInterval(refreshInterval);
         }
+        contentResizeObserver?.disconnect();
         window.removeEventListener('resize', resizeAllIframes);
     });
 
@@ -289,23 +305,43 @@
     }
 
     // Size the iframe to its content so the report reads as part of the card
-    // instead of a scrollable inner frame. sandbox="allow-same-origin" (without
-    // allow-scripts) keeps report HTML inert while letting us measure it.
+    // instead of a scrollable inner frame. sandbox="allow-same-origin
+    // allow-scripts" lets us measure the content and lets interactive report
+    // HTML (buttons, scripts) run; report bodies are treated as trusted.
     function resizeIframe(iframe: HTMLIFrameElement) {
         try {
             const doc = iframe.contentDocument;
             if (!doc) {
                 return;
             }
+            // Collapse the frame before measuring so a previously-tall iframe
+            // does not pin documentElement.scrollHeight to its own height and
+            // prevent the container from shrinking when content gets shorter.
+            // The reset and re-set happen in one task, so no intermediate
+            // height is painted.
+            const previous = iframe.style.height;
+            iframe.style.height = '0px';
             const height = Math.max(
                 doc.documentElement?.scrollHeight ?? 0,
                 doc.body?.scrollHeight ?? 0
             );
-            if (height > 0) {
-                iframe.style.height = `${height}px`;
-            }
+            iframe.style.height = height > 0 ? `${height}px` : previous;
         } catch {
             // Measurement blocked; leave the placeholder height in place.
+        }
+    }
+
+    // On load, size the iframe once and start observing its document so later
+    // content-height changes keep the container in sync.
+    function onIframeLoad(iframe: HTMLIFrameElement) {
+        resizeIframe(iframe);
+        const doc = iframe.contentDocument;
+        if (!doc || !contentResizeObserver) {
+            return;
+        }
+        contentResizeObserver.observe(doc.documentElement);
+        if (doc.body) {
+            contentResizeObserver.observe(doc.body);
         }
     }
 
@@ -380,36 +416,41 @@
 <div class="mt-6 w-full pb-8 sm:pb-10">
     {#if hasLoaded}
         <div class="mb-4 flex items-center justify-between gap-3">
-            <div>
+            <div class="text-xs text-gray-600 dark:text-gray-400">
+                {#if hasReports}
+                    {reportEntries.length} report{reportEntries.length === 1 ? '' : 's'} loaded
+                {/if}
+            </div>
+            <div class="flex items-center gap-3">
                 {#if autoRefreshing}
                     <span class="text-xs text-gray-600 dark:text-gray-400"
                         >Auto-refreshes every 30s</span
                     >
                 {/if}
-            </div>
-            <button
-                class="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 transition-all duration-200 hover:bg-gray-200 focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                onclick={refreshReports}
-                disabled={isRefreshing}
-                aria-label="Refresh reports"
-                title="Manually refresh reports"
-            >
-                <svg
-                    class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
+                <button
+                    class="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 transition-all duration-200 hover:bg-gray-200 focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                    onclick={refreshReports}
+                    disabled={isRefreshing}
+                    aria-label="Refresh reports"
+                    title="Manually refresh reports"
                 >
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                </svg>
-                <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
-            </button>
+                    <svg
+                        class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
+                    </svg>
+                    <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+                </button>
+            </div>
         </div>
     {/if}
 
@@ -463,11 +504,11 @@
                             <iframe
                                 title="Report: {reportId}"
                                 srcdoc={report.body}
-                                sandbox="allow-same-origin"
+                                sandbox="allow-same-origin allow-scripts"
                                 referrerpolicy="no-referrer"
                                 scrolling="no"
                                 onload={(event) =>
-                                    resizeIframe(event.currentTarget as HTMLIFrameElement)}
+                                    onIframeLoad(event.currentTarget as HTMLIFrameElement)}
                                 style="height: 24rem;"
                                 class="block w-full overflow-hidden border-0 bg-transparent"
                             ></iframe>
