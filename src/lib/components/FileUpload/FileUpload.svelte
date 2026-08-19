@@ -9,7 +9,13 @@
     import type { Upload, RejectFile } from './types';
 
     import ImagePlus from '@lucide/svelte/icons/image-plus';
-    let { baseUrl, bucket } = $props<{ baseUrl: string; bucket: string }>();
+    // DEMO AUTO-RUN: automatic bactopia/kraken2 trigger after upload.
+    import { runDemoWorkflow, isAbortError } from '$lib/demoAutoRun';
+    let { baseUrl, bucket, onAutoRunStarted } = $props<{
+        baseUrl: string;
+        bucket: string;
+        onAutoRunStarted?: (dagId: string, dagRunId: string) => void;
+    }>();
 
     let api = $state<Api | undefined>(undefined);
     let upload = $state<Upload>({
@@ -22,6 +28,11 @@
     let sampleMatrix = $state('');
     let sampleCollectionLocation = $state('');
     let sampleCollectionDate = $state<Date>(new Date());
+    // DEMO AUTO-RUN state.
+    let autoRun = $state(true);
+    let autoRunActive = $state(false);
+    let autoRunMessage = $state<string | null>(null);
+    let demoController = $state<AbortController | undefined>(undefined);
     const components = $derived(api?.acceptedFiles ?? []);
     const filename = $derived(sampleId ? `sample-${sampleId}.tar` : '');
     const fileListCss = $derived(
@@ -130,6 +141,11 @@
                 toaster.success({
                     title: `Upload ${filename} completed.`
                 });
+                if (autoRun) {
+                    // Fire-and-forget: startAutoRun handles its own errors so
+                    // it never trips the upload catch/finally below.
+                    void startAutoRun();
+                }
             }
         } catch (err: unknown) {
             if (err && typeof err === 'object' && 'name' in err && err.name === 'CanceledError') {
@@ -149,10 +165,47 @@
     }
 
     function onCancel() {
+        if (autoRunActive) {
+            demoController?.abort?.();
+            return;
+        }
         if (upload.bytesSent < upload.totalBytes) {
             upload.controller?.abort?.();
         }
         upload.state = 'pending';
+    }
+
+    /**
+     * DEMO AUTO-RUN: after a successful upload, wait for the ETL clean reads
+     * and trigger the bactopia/kraken2 workflow, then hand the new run to the
+     * page so it can jump to the workflow status view.
+     */
+    async function startAutoRun() {
+        autoRunActive = true;
+        const controller = new AbortController();
+        demoController = controller;
+        try {
+            const { dagId, dagRunId } = await runDemoWorkflow(baseUrl, sampleId, {
+                signal: controller.signal,
+                onStatus: (status) => (autoRunMessage = status.message)
+            });
+            toaster.success({ title: 'bactopia/kraken2 workflow started.' });
+            onAutoRunStarted?.(dagId, dagRunId);
+        } catch (err) {
+            if (isAbortError(err)) {
+                autoRunMessage = 'Automatic workflow run canceled.';
+                toaster.info({ title: 'Automatic workflow run canceled.' });
+            } else {
+                const message = err instanceof Error ? err.message : String(err);
+                autoRunMessage =
+                    `Automatic run failed after retries: ${message}. ` +
+                    'You can start the bactopia/kraken2 workflow manually from the Workflows tab.';
+                toaster.error({ title: `Automatic workflow run failed: ${message}` });
+            }
+        } finally {
+            autoRunActive = false;
+            demoController = undefined;
+        }
     }
 </script>
 
@@ -172,7 +225,7 @@
                 <input
                     id="sample-id"
                     name="sample-id"
-                    class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100"
+                    class="input input-bordered dark:bg-surface-950 bg-white text-gray-950 dark:text-gray-100"
                     type="text"
                     bind:value={sampleId}
                     aria-label="Sample ID"
@@ -183,7 +236,7 @@
                 <input
                     id="sample-type"
                     name="sample-type"
-                    class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100"
+                    class="input input-bordered dark:bg-surface-950 bg-white text-gray-950 dark:text-gray-100"
                     type="text"
                     bind:value={sampleType}
                     aria-label="Sample Type"
@@ -196,7 +249,7 @@
                 <input
                     id="sample-matrix"
                     name="sample-matrix"
-                    class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100"
+                    class="input input-bordered dark:bg-surface-950 bg-white text-gray-950 dark:text-gray-100"
                     type="text"
                     bind:value={sampleMatrix}
                     aria-label="Sample Matrix"
@@ -209,7 +262,7 @@
                 <input
                     id="sample-collection-location"
                     name="sample-collection-location"
-                    class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100"
+                    class="input input-bordered dark:bg-surface-950 bg-white text-gray-950 dark:text-gray-100"
                     type="text"
                     bind:value={sampleCollectionLocation}
                     aria-label="Sample Collection Location"
@@ -222,7 +275,7 @@
                 <input
                     id="sample-collection-date"
                     name="sample-collection-date"
-                    class="input input-bordered bg-white text-gray-950 dark:bg-surface-950 dark:text-gray-100"
+                    class="input input-bordered dark:bg-surface-950 bg-white text-gray-950 dark:text-gray-100"
                     type="date"
                     value={fmtDate(sampleCollectionDate)}
                     oninput={(e) =>
@@ -254,11 +307,47 @@
         </FileUpload>
         <FileUploadProgress {filename} {upload} />
 
+        <!-- DEMO AUTO-RUN: opt-out toggle for automatic bactopia/kraken2 run. -->
+        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input
+                class="checkbox"
+                type="checkbox"
+                bind:checked={autoRun}
+                disabled={upload.state !== 'pending'}
+                aria-label="Automatically run bactopia/kraken2 after upload"
+            />
+            <span>Automatically run bactopia/kraken2 after upload</span>
+        </label>
+
+        {#if autoRunMessage}
+            <div class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                {#if autoRunActive}
+                    <svg
+                        class="h-4 w-4 flex-shrink-0 animate-spin"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
+                    </svg>
+                {/if}
+                <span>{autoRunMessage}</span>
+            </div>
+        {/if}
+
         <div class="pb-8 sm:pb-10">
             {#if upload.state === 'pending'}
                 <button class={buttonCss} onclick={onUpload}>Upload</button>
             {:else if upload.state === 'uploading'}
                 <button class={buttonCss} onclick={onCancel}>Cancel</button>
+            {:else if autoRunActive}
+                <button class={buttonCss} onclick={onCancel}>Cancel automatic run</button>
             {:else if upload.state === 'complete'}
                 <button class={buttonDoneCss}>Upload complete</button>
             {/if}

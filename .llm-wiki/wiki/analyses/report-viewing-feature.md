@@ -12,12 +12,18 @@ one inline. Component: `src/lib/components/Report/Report.svelte`.
    `initialSampleId`; a user-initiated load reflects the sample back into the URL
    via the `onSampleLoad` callback.
 2. Component requests all available reports from the CAPE API
-   (`GET /report/get?sampleId=...`). The response is a `{ reportId: html }` map;
-   an empty object means no reports exist yet. The initial load is cancelable.
-3. Each report renders in its own accordion card (`details`/`summary`), all
-   expanded by default and individually collapsible. The card heading is taken
-   from the report document's `<title>` (falling back to a readable form of the
-   report id). Report HTML is embedded in a per-report `iframe` with
+   (`GET /report/get?sampleId=...`). The response is a
+   `{ reportId: { createdAt, body } }` map, where `createdAt` is an ISO
+   timestamp and `body` is the report HTML; an empty object means no reports
+   exist yet. `normalizeReports` tolerates a legacy plain-string value (treated
+   as `body` with an empty `createdAt`). The initial load is cancelable.
+3. Reports are listed oldest-first, sorted by `createdAt` (entries without a
+   parseable timestamp sort last). Each report renders in its own accordion card
+   (`details`/`summary`), all expanded by default and individually collapsible.
+   The card heading is taken from the report document's `<title>` (falling back
+   to a readable form of the report id), with the `createdAt` rendered on the
+   right in the browser's local timezone (via `Intl.DateTimeFormat`, including
+   the zone name). Report HTML is embedded in a per-report `iframe` with
    `sandbox="allow-same-origin"` (no `allow-scripts`), so the report cannot run
    scripts, submit forms, or navigate the parent, while still being same-origin
    enough for the parent to measure it.

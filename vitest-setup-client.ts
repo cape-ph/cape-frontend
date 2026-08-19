@@ -15,4 +15,15 @@ Object.defineProperty(window, 'matchMedia', {
     }))
 });
 
+// jsdom does not implement ResizeObserver, which Report.svelte uses to track
+// report iframe content height.
+vi.stubGlobal(
+    'ResizeObserver',
+    class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    }
+);
+
 // add more mocks here if you need them

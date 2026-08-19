@@ -105,7 +105,7 @@
 </script>
 
 <div
-    class="rounded-lg border bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:bg-surface-950 {needsAttention
+    class="dark:bg-surface-950 rounded-lg border bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md {needsAttention
         ? 'border-l-4 border-rose-500 dark:border-rose-600'
         : 'border-gray-300 dark:border-gray-600'}"
     role="article"

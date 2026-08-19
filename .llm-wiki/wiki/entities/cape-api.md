@@ -36,9 +36,12 @@ Object storage (S3 multipart brokering):
 
 Reports:
 
-- `GET /report/get?sampleId=` -> `{ [reportId: string]: string }`, a map of
-  report id to fully-formed HTML document. Used by the Report tab to show every
-  available report for a sample. An empty object means no reports exist yet.
+- `GET /report/get?sampleId=` ->
+  `{ [reportId: string]: { createdAt: string; body: string } }`, a map of report
+  id to `{ createdAt (ISO timestamp), body (fully-formed HTML document) }`. Used
+  by the Report tab to show every available report for a sample, listed
+  oldest-first by `createdAt`. An empty object means no reports exist yet. (The
+  client also tolerates a legacy plain-string value as the `body`.)
 - `GET /report/create?sampleId=&reportId=&format=html` -> report HTML (single
   report; no longer called by the frontend, retained for reference).
 

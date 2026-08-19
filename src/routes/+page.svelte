@@ -131,6 +131,22 @@
             replaceState: false
         });
     }
+
+    // DEMO AUTO-RUN: jump to the new workflow's detail view once the automatic
+    // bactopia/kraken2 run starts after an upload.
+    function handleAutoRunStarted(dagId: string, dagRunId: string) {
+        activeKey = 'workflows';
+        handleSelectRun(dagId, dagRunId);
+    }
+
+    // Jump from a finished workflow's detail view to its sample's report.
+    function handleViewReport(sampleId: string) {
+        activeKey = 'report';
+        selectedSampleId = sampleId;
+        goto(resolve(`/?tab=report&sampleId=${encodeURIComponent(sampleId)}` as `/?${string}`), {
+            replaceState: false
+        });
+    }
 </script>
 
 {#if auth.user}
@@ -142,6 +158,7 @@
                     <FileUpload
                         baseUrl={apiBase}
                         bucket="ccd-dlh-t-seqauto-input-raw-vbkt-s3-b8fded5"
+                        onAutoRunStarted={handleAutoRunStarted}
                     />
                 </div>
             {:else if activeKey === 'workflows'}
@@ -161,6 +178,7 @@
                             dagRunId={selectedDagRunId}
                             onBack={handleBackToList}
                             onHalt={handleOpenHaltModal}
+                            onViewReport={handleViewReport}
                         />
                         <HaltWorkflowModal
                             baseUrl={apiBase}
