@@ -197,7 +197,9 @@
                 toaster.info({ title: 'Automatic workflow run canceled.' });
             } else {
                 const message = err instanceof Error ? err.message : String(err);
-                autoRunMessage = `Automatic run failed: ${message}`;
+                autoRunMessage =
+                    `Automatic run failed after retries: ${message}. ` +
+                    'You can start the bactopia/kraken2 workflow manually from the Workflows tab.';
                 toaster.error({ title: `Automatic workflow run failed: ${message}` });
             }
         } finally {

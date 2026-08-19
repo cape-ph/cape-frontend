@@ -17,8 +17,9 @@
  * grants.
  */
 
+import axios from 'axios';
 import { capi } from '$lib/apiClient';
-import { getWorkflowProfiles } from '$lib/pipeline';
+import { getWorkflowProfilesCached } from '$lib/pipeline';
 import type { PipelineProfile } from '$lib/pipeline';
 import { getDefaultOptions, getParameterFields } from '$lib/schema';
 
@@ -39,6 +40,19 @@ const READS_OBJECT_SUFFIX = 'sequencing-reads.gz';
 /** Poll cadence and overall timeout while waiting for the ETL output. */
 const POLL_INTERVAL_MS = 15_000;
 const POLL_TIMEOUT_MS = 30 * 60 * 1000;
+
+// --- network resilience (mirrors the guardrails in mpu.ts) -------------------
+
+/**
+ * Per-request timeout. On a stalled connection (no reset, the socket just
+ * hangs) axios aborts with ECONNABORTED and no response, which the retry/poll
+ * logic treats as a transient failure. Without this a hung request would block
+ * the whole run indefinitely.
+ */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+/** Max attempts for a single retryable request (matches mpu.ts intent). */
+const MAX_ATTEMPTS = 4;
 
 // --- types -------------------------------------------------------------------
 
@@ -67,7 +81,26 @@ interface PipelineConfig {
 // --- helpers -----------------------------------------------------------------
 
 function isAbortError(err: unknown): boolean {
-    return err instanceof DOMException && err.name === 'AbortError';
+    return (err instanceof DOMException && err.name === 'AbortError') || axios.isCancel(err);
+}
+
+/**
+ * Retry only failures that a questionable network produces: connection drops,
+ * DNS/connect errors, and request timeouts (an axios error with no response),
+ * plus the retryable server statuses. This mirrors mpu.ts's shouldRetry and its
+ * "no response => network error" handling.
+ */
+function isRetryableError(err: unknown): boolean {
+    if (!axios.isAxiosError(err)) return false;
+    if (!err.response) return true; // network drop, connect failure, or timeout
+    const status = err.response.status;
+    return status >= 500 || status === 429 || status === 408;
+}
+
+/** Exponential backoff with jitter, same shape as mpu.ts. */
+function backoff(attempt: number): number {
+    const offset = Math.floor(Math.random() * 100);
+    return 300 * 2 ** (attempt - 1) + offset;
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
@@ -88,14 +121,45 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
     });
 }
 
+/**
+ * Run a request with bounded retries and exponential backoff, honoring an
+ * AbortSignal between attempts. Abort/cancel is never retried; non-retryable
+ * errors surface immediately.
+ */
+async function withRetry<T>(
+    fn: () => Promise<T>,
+    options: { signal?: AbortSignal; attempts?: number } = {}
+): Promise<T> {
+    const { signal, attempts = MAX_ATTEMPTS } = options;
+    let attempt = 0;
+    for (;;) {
+        if (signal?.aborted) {
+            throw new DOMException('Aborted', 'AbortError');
+        }
+        attempt += 1;
+        try {
+            return await fn();
+        } catch (err) {
+            if (isAbortError(err) || !isRetryableError(err) || attempt >= attempts) {
+                throw err;
+            }
+            await delay(backoff(attempt), signal);
+        }
+    }
+}
+
 /** List clean-read object keys for a sample under the input-clean bucket. */
-async function listCleanReadObjects(baseUrl: string, sampleId: string): Promise<string[]> {
+async function listCleanReadObjects(
+    baseUrl: string,
+    sampleId: string,
+    signal?: AbortSignal
+): Promise<string[]> {
     const url = `${baseUrl}/objstorage/contents`;
     const params = {
         bucket: INPUT_CLEAN_BUCKET,
         prefix: `sequencing-reads/sample_id=${sampleId}/`
     };
-    const response = await capi.get(url, { params });
+    const response = await capi.get(url, { params, signal, timeout: REQUEST_TIMEOUT_MS });
     const objects = response.data?.objects;
     return Array.isArray(objects) ? (objects as string[]) : [];
 }
@@ -125,10 +189,12 @@ export async function pollForOntReads(
 
         let objects: string[] = [];
         try {
-            objects = await listCleanReadObjects(baseUrl, sampleId);
+            objects = await listCleanReadObjects(baseUrl, sampleId, signal);
         } catch (err) {
-            // Transient listing failures should not abort the demo run; keep
-            // polling until the deadline.
+            // A questionable network makes list calls fail intermittently (drops,
+            // timeouts). Treat any non-abort failure as "ETL still running" and
+            // keep polling until the deadline; the per-request timeout ensures a
+            // stalled connection cannot wedge the loop.
             if (isAbortError(err)) {
                 throw err;
             }
@@ -158,9 +224,13 @@ export async function pollForOntReads(
 export async function buildPipelineConfigs(
     baseUrl: string,
     sampleId: string,
-    ontUri: string
+    ontUri: string,
+    signal?: AbortSignal
 ): Promise<{ pipelineConfigs: PipelineConfig[] }> {
-    const profiles: PipelineProfile[] = await getWorkflowProfiles(baseUrl, DAG_ID);
+    const profiles: PipelineProfile[] = await withRetry(
+        () => getWorkflowProfilesCached(baseUrl, DAG_ID),
+        { signal }
+    );
 
     const pipelineConfigs: PipelineConfig[] = [];
 
@@ -192,10 +262,18 @@ export async function buildPipelineConfigs(
 /** POST the trigger and return the created DAG run identifiers. */
 async function triggerWorkflow(
     baseUrl: string,
-    payload: { pipelineConfigs: PipelineConfig[] }
+    payload: { pipelineConfigs: PipelineConfig[] },
+    signal?: AbortSignal
 ): Promise<DemoAutoRunResult> {
     const endpoint = `${baseUrl}/workflows/trigger?dagId=${encodeURIComponent(DAG_ID)}`;
-    const response = await capi.post(endpoint, payload);
+    // Retry the trigger through transient network failures. Caveat: a drop that
+    // happens after the server created the run but before its response reached
+    // us would cause a retry to create a second run. That window is narrow and
+    // this is demo-scoped; a durable dedup key would need backend support.
+    const response = await withRetry(
+        () => capi.post(endpoint, payload, { signal, timeout: REQUEST_TIMEOUT_MS }),
+        { signal }
+    );
     const { dag_id: dagId, dag_run_id: dagRunId } = response.data ?? {};
 
     if (!dagId || !dagRunId) {
@@ -219,14 +297,14 @@ export async function runDemoWorkflow(
     const ontUri = await pollForOntReads(baseUrl, sampleId, options);
 
     onStatus?.({ phase: 'preparing', message: 'Clean reads ready. Preparing workflow...' });
-    const payload = await buildPipelineConfigs(baseUrl, sampleId, ontUri);
+    const payload = await buildPipelineConfigs(baseUrl, sampleId, ontUri, signal);
 
     if (signal?.aborted) {
         throw new DOMException('Aborted', 'AbortError');
     }
 
     onStatus?.({ phase: 'triggering', message: 'Starting bactopia/kraken2 workflow...' });
-    const result = await triggerWorkflow(baseUrl, payload);
+    const result = await triggerWorkflow(baseUrl, payload, signal);
 
     onStatus?.({ phase: 'started', message: 'Workflow started. Redirecting to status...' });
     return result;
