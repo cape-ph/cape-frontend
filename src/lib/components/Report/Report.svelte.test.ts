@@ -175,6 +175,10 @@ describe('Report.svelte', () => {
         ).toBeInTheDocument();
         expect(screen.getByText('Bactopia Single Sample Analysis')).toBeInTheDocument();
 
+        const reportFrame = screen.getByTitle('Report: rabits');
+        expect(reportFrame).toHaveAttribute('sandbox', 'allow-same-origin allow-scripts');
+        expect(reportFrame).toHaveAttribute('referrerpolicy', 'no-referrer');
+
         // Reports default to expanded.
         for (const details of document.querySelectorAll('details')) {
             expect(details).toHaveAttribute('open');

@@ -131,7 +131,7 @@
             replaceState: false
         });
     }
-    // Jump from a finished workflow's detail view to its sample's report.
+    // Jump from a workflow detail view to its sample's report.
     function handleViewReport(sampleId: string) {
         activeKey = 'report';
         selectedSampleId = sampleId;
