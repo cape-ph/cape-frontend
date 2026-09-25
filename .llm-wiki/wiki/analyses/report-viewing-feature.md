@@ -24,12 +24,14 @@ one inline. Component: `src/lib/components/Report/Report.svelte`.
    to a readable form of the report id), with the `createdAt` rendered on the
    right in the browser's local timezone (via `Intl.DateTimeFormat`, including
    the zone name). Report HTML is embedded in a per-report `iframe` with
-   `sandbox="allow-same-origin"` (no `allow-scripts`), so the report cannot run
-   scripts, submit forms, or navigate the parent, while still being same-origin
-   enough for the parent to measure it.
-4. Iframes are auto-sized to their content height on load (and on window resize)
-   with `scrolling="no"` and no border, so a report reads as part of the card
-   rather than a scrollable inner frame - the outer page scrolls, not the iframe.
+   `sandbox="allow-same-origin allow-scripts"` so trusted CAPE-generated reports
+   can run their interactive controls. This is not a defense against malicious
+   same-origin report HTML; the report body must remain trusted backend output.
+4. Iframes are auto-sized to their content height on load, when observed content
+   changes, and on window resize. The implementation resets the frame height
+   before measuring so the container can both grow and shrink. With
+   `scrolling="no"` and no border, a report reads as part of the card rather than
+   a scrollable inner frame - the outer page scrolls, not the iframe.
 
 ## Refresh and auto-refresh
 

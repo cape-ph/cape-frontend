@@ -34,9 +34,14 @@ uses raw `document.cookie`, not this package).
 ## Trust boundaries
 
 - The browser trusts the CAPE API for schemas, presigned URLs, and report HTML.
-  Report HTML is rendered in a `sandbox="allow-same-origin"` iframe (no
-  `allow-scripts`), so it stays inert while being measurable for auto-sizing
-  ([[analyses/report-viewing-feature]]).
+  Report HTML is rendered in a `sandbox="allow-same-origin allow-scripts"` iframe
+  so trusted CAPE-generated reports can run interactive controls. This is not a
+  defense against malicious same-origin report HTML, so report bodies must remain
+  trusted backend output ([[analyses/report-viewing-feature]]).
+- Report-count requests use the authenticated `capi` client, but the Report
+  component still fetches report bodies through bare Axios. Complete migration of
+  Report and multipart-upload calls to the authenticated client remains tracked by
+  GitHub issue #35.
 - No secrets in the frontend; only `PUBLIC_*` env vars, injected at runtime via
   `$env/dynamic/public` ([[concepts/authentication-cognito]]).
 
