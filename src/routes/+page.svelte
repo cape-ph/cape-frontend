@@ -131,6 +131,14 @@
             replaceState: false
         });
     }
+    // Jump from a workflow detail view to its sample's report.
+    function handleViewReport(sampleId: string) {
+        activeKey = 'report';
+        selectedSampleId = sampleId;
+        goto(resolve(`/?tab=report&sampleId=${encodeURIComponent(sampleId)}` as `/?${string}`), {
+            replaceState: false
+        });
+    }
 </script>
 
 {#if auth.user}
@@ -161,6 +169,7 @@
                             dagRunId={selectedDagRunId}
                             onBack={handleBackToList}
                             onHalt={handleOpenHaltModal}
+                            onViewReport={handleViewReport}
                         />
                         <HaltWorkflowModal
                             baseUrl={apiBase}
